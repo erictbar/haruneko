@@ -47,6 +47,25 @@ type CryptoParams = null | {
 export default class extends DecoratableMangaScraper {
     private readonly apiUrl = 'https://global-api.manga-up.com/api/';
     private readonly imagesCDN = 'https://global-img.manga-up.com/';
+    private readonly secret = '<secret>'; // Replace with the actual secret
+
+    // Helper method to build authenticated URLs
+    private buildApiUrl(endpoint: string, additionalParams: Record<string, string> = {}): URL {
+        const url = new URL(endpoint, this.apiUrl);
+        const params = {
+            secret: this.secret,
+            app_ver: '0',
+            os_ver: '0',
+            ui_lang: 'en',
+            ...additionalParams
+        };
+        
+        Object.entries(params).forEach(([key, value]) => {
+            url.searchParams.set(key, value);
+        });
+        
+        return url;
+    }
 
     public constructor() {
         super('mangaupglobal', `MangaUp (Global)`, `https://global.manga-up.com`, Tags.Language.English, Tags.Media.Manga, Tags.Source.Official);
@@ -61,28 +80,40 @@ export default class extends DecoratableMangaScraper {
 
     public override async FetchManga(provider: MangaPlugin, url: string): Promise<Manga> {
         const mangaid = url.split('/').at(-1);
-        const request = new Request(new URL(`./manga/detail_v2?title_id=${mangaid}`, this.apiUrl));
+        const request = new Request(this.buildApiUrl('./manga/detail_v2', { 
+            title_id: mangaid, 
+            quality: 'middle' 
+        }));
         const { titleName } = await FetchProto<APIMangaDetailView>(request, protoTypes, 'MangaUpGlobal.MangaDetailView');
         return new Manga(this, provider, mangaid, titleName);
     }
 
     public override async FetchMangas(provider: MangaPlugin): Promise<Manga[]> {
-        const request = new Request(new URL(`./search`, this.apiUrl));
+        const request = new Request(this.buildApiUrl('./search'));
         const { titles } = await FetchProto<APISearch>(request, protoTypes, 'MangaUpGlobal.SearchView');
         return titles.map(manga => new Manga(this, provider, manga.titleId.toString(), manga.titleName.trim()));
     }
 
     public override async FetchChapters(manga: Manga): Promise<Chapter[]> {
-        const request = new Request(new URL(`./manga/detail_v2?title_id=${manga.Identifier}`, this.apiUrl));
+        const request = new Request(this.buildApiUrl('./manga/detail_v2', { 
+            title_id: manga.Identifier, 
+            quality: 'middle' 
+        }));
         const { chapters } = await FetchProto<APIMangaDetailView>(request, protoTypes, 'MangaUpGlobal.MangaDetailView');
         return chapters.map(chapter => new Chapter(this, manga, chapter.id.toString(), [chapter.titleName, chapter.subName].join(' ').trim()));
     }
 
     public override async FetchPages(chapter: Chapter): Promise<Page<CryptoParams>[]> {
-        const request = new Request(new URL(`./manga/viewer_v2?chapter_id=${chapter.Identifier}&quality=high`, this.apiUrl), { method: 'POST' });
+        const request = new Request(this.buildApiUrl('./manga/viewer_v2', { 
+            chapter_id: chapter.Identifier, 
+            quality: 'high' 
+        }), { method: 'POST' });
+        
         const data = await FetchProto<APIPages>(request, protoTypes, 'MangaUpGlobal.MangaViewerV2View');
 
-        if (!data.pageblocks) throw new Exception(W.Plugin_Common_Chapter_UnavailableError);
+        if (!data.pageblocks || data.pageblocks.length === 0) {
+            throw new Exception(W.Plugin_Common_Chapter_UnavailableError);
+        }
 
         return data.pageblocks.shift().pages.map(page => {
             const params: CryptoParams = page.iv ? {
