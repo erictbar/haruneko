@@ -47,7 +47,7 @@ type CryptoParams = null | {
 export default class extends DecoratableMangaScraper {
     private readonly apiUrl = 'https://global-api.manga-up.com/api/';
     private readonly imagesCDN = 'https://global-img.manga-up.com/';
-    private readonly secret = '<secret>'; // Replace with the actual secret
+    private readonly secret = import.meta.env.VITE_MANGAUP_SECRET || '';
 
     // Helper method to build authenticated URLs
     private buildApiUrl(endpoint: string, additionalParams: Record<string, string> = {}): URL {
@@ -69,6 +69,7 @@ export default class extends DecoratableMangaScraper {
 
     public constructor() {
         super('mangaupglobal', `MangaUp (Global)`, `https://global.manga-up.com`, Tags.Language.English, Tags.Media.Manga, Tags.Source.Official);
+        console.log('MangaUp Secret loaded:', this.secret ? 'Yes' : 'No'); // Remove this after testing
     }
     public override get Icon() {
         return icon;
