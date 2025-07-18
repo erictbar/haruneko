@@ -190,9 +190,12 @@ export enum FrontendResourceKey {
     Frontend_FluentCore_Menu_ImportBookmarks_Description = 'Frontend_FluentCore_Menu_ImportBookmarks_Description',
     Frontend_FluentCore_Menu_ExportBookmarks_Label = 'Frontend_FluentCore_Menu_ExportBookmarks_Label',
     Frontend_FluentCore_Menu_ExportBookmarks_Description = 'Frontend_FluentCore_Menu_ExportBookmarks_Description',
+    Frontend_FluentCore_Button_ToggleTheme_Description = 'Frontend_FluentCore_Button_ToggleTheme_Description',
 
-    Frontend_FluentCore_Settings_ThemeLuminance_Label = 'Frontend_FluentCore_Settings_ThemeLuminance_Label',
-    Frontend_FluentCore_Settings_ThemeLuminance_Description = 'Frontend_FluentCore_Settings_ThemeLuminance_Description',
+    Frontend_FluentCore_Settings_ThemeMode_Label = 'Frontend_FluentCore_Settings_ThemeMode_Label',
+    Frontend_FluentCore_Settings_ThemeMode_Description = 'Frontend_FluentCore_Settings_ThemeMode_Description',
+    Frontend_FluentCore_Settings_ThemeMode_WebDark = 'Frontend_FluentCore_Settings_ThemeMode_WebDark',
+    Frontend_FluentCore_Settings_ThemeMode_WebLight = 'Frontend_FluentCore_Settings_ThemeMode_WebLight',
     Frontend_FluentCore_Settings_ShowBookmarksPanel_Label = 'Frontend_FluentCore_Settings_ShowBookmarksPanel_Label',
     Frontend_FluentCore_Settings_ShowBookmarksPanel_Description = 'Frontend_FluentCore_Settings_ShowBookmarksPanel_Description',
     Frontend_FluentCore_Settings_ShowDownloadsPanel_Label = 'Frontend_FluentCore_Settings_ShowDownloadsPanel_Label',
@@ -348,6 +351,16 @@ export enum WebsiteResourceKey {
 // [SECTION]: Website PocketComics
 export enum WebsiteResourceKey {
     Plugin_PocketComics_LanguageMismatchError = 'Plugin_PocketComics_LanguageMismatchError',
+}
+
+// [SECTION]: Website Lezhin (all)
+export enum WebsiteResourceKey {
+    Plugin_Lezhin_Settings_Username = 'Plugin_Lezhin_Settings_Username',
+    Plugin_Lezhin_Settings_UsernameInfo = 'Plugin_Lezhin_Settings_UsernameInfo',
+    Plugin_Lezhin_Settings_Password = 'Plugin_Lezhin_Settings_Password',
+    Plugin_Lezhin_Settings_PasswordInfo = 'Plugin_Lezhin_Settings_PasswordInfo',
+    Plugin_Lezhin_Settings_Force_JPEG = 'Plugin_Lezhin_Settings_Force_JPEG',
+    Plugin_Lezhin_Settings_Force_JPEGInfo = 'Plugin_Lezhin_Settings_Force_JPEGInfo'
 }
 
 // [SECTION]: Website SheepScanlations

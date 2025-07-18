@@ -100,9 +100,12 @@ const translations: VariantResource = {
   Frontend_FluentCore_Menu_ImportBookmarks_Description: 'Import all bookmarks from a file (existing bookmarks will be kept)',
   Frontend_FluentCore_Menu_ExportBookmarks_Label: 'Export Bookmarks…',
   Frontend_FluentCore_Menu_ExportBookmarks_Description: 'Export all bookmarks to a file (e.g., for backup)',
+  Frontend_FluentCore_Button_ToggleTheme_Description: 'Toggle Theme to {0}',
   //
-  Frontend_FluentCore_Settings_ThemeLuminance_Label: 'Theme Luminance',
-  Frontend_FluentCore_Settings_ThemeLuminance_Description: 'Change the lightness/darkness of the theme',
+  Frontend_FluentCore_Settings_ThemeMode_Label: 'Theme',
+  Frontend_FluentCore_Settings_ThemeMode_Description: 'Select the color mode for the user interface',
+  Frontend_FluentCore_Settings_ThemeMode_WebDark: 'Dark (Web)',
+  Frontend_FluentCore_Settings_ThemeMode_WebLight: 'Light (Web)',
   Frontend_FluentCore_Settings_ShowBookmarksPanel_Label: 'Bookmark List',
   Frontend_FluentCore_Settings_ShowBookmarksPanel_Description: 'Toggle the visibility of the bookmark list on/off',
   Frontend_FluentCore_Settings_ShowDownloadsPanel_Label: 'Download Manager',
@@ -316,6 +319,13 @@ const translations: VariantResource = {
   Plugin_CuuTruyen_Error_NotProcessed: 'This chapter is still processing, please try again later.',
 
   Plugin_PocketComics_LanguageMismatchError: 'Unable to find manga {0} for selected language {1}',
+
+  Plugin_Lezhin_Settings_Username: 'Email',
+  Plugin_Lezhin_Settings_UsernameInfo: 'Email for Lezhin login',
+  Plugin_Lezhin_Settings_Password: 'Password',
+  Plugin_Lezhin_Settings_PasswordInfo: 'Password for Lezhin login',
+  Plugin_Lezhin_Settings_Force_JPEG: 'Force images as JPEG?',
+  Plugin_Lezhin_Settings_Force_JPEGInfo: 'Set images formats as JPEG instead of WEBP.',
 
   Plugin_SheepScanlations_Settings_Username: 'Username',
   Plugin_SheepScanlations_Settings_UsernameInfo: 'Username for automatic account login to Sheep-Scanlations 😉',
