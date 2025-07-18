@@ -1,12 +1,12 @@
 import { TestFixture } from '../../../test/WebsitesFixture';
 
-const config = {
+new TestFixture({
     plugin: {
         id: 'allhentai',
         title: 'AllHentai'
     },
     container: {
-        url: 'https://20.allhen.online/nochiu_ona_nimfomanka',
+        url: 'https://z.allhen.online/nochiu_ona_nimfomanka',
         id: '/nochiu_ona_nimfomanka',
         title: 'Ночью она нимфоманка'
     },
@@ -21,6 +21,4 @@ const config = {
         size: 155_934,
         type: 'image/png'
     }*/
-};
-
-new TestFixture(config).AssertWebsite();
+}).AssertWebsite();
