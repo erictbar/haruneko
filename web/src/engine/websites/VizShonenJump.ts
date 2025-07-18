@@ -7,6 +7,9 @@ import * as Common from './decorators/Common';
 import exifr from 'exifr';
 import DeScramble from '../transformers/ImageDescrambler';
 
+// Add this import for RegExpSafe
+const RegExpSafe = RegExp;
+
 type UserInfos = {
     isLoggedIn: boolean,
     isAdult: boolean,
@@ -55,6 +58,19 @@ function VolumesExtractor(row: HTMLTableRowElement) {
     };
 }
 
+// Helper function to remove duplicates
+function removeDuplicates<T>(array: T[], keySelector: (item: T) => string = (item) => JSON.stringify(item)): T[] {
+    const seen = new Set<string>();
+    return array.filter(item => {
+        const key = keySelector(item);
+        if (seen.has(key)) {
+            return false;
+        }
+        seen.add(key);
+        return true;
+    });
+}
+
 export default class extends DecoratableMangaScraper {
     private userInfos: UserInfos;
 
@@ -69,7 +85,7 @@ export default class extends DecoratableMangaScraper {
     public override ValidateMangaURL(url: string): boolean {
         const mangaRegexp = new RegExpSafe(`^${this.URI.origin}/(shonenjump|vizmanga)/chapters/[^/]+$`);
         const libraryRegexp = new RegExpSafe(`^${this.URI.origin}/account/library/(gn|sj)/[^/]+$`);
-        return mangaRegexp.test(url) || libraryRegexp.test(url) ;
+        return mangaRegexp.test(url) || libraryRegexp.test(url);
     }
 
     public override async FetchManga(provider: MangaPlugin, url: string): Promise<Manga> {
@@ -78,12 +94,15 @@ export default class extends DecoratableMangaScraper {
     }
 
     public override async FetchMangas(provider: MangaPlugin): Promise<Manga[]> {
-        return [
-            ...await Common.FetchMangasSinglePageCSS.call(this, provider, '/account/library', 'table.purchase-table a', MangasExtractor),
-            ...await Common.FetchMangasSinglePageCSS.call(this, provider, '/account/library/sj', 'table.purchase-table a', MangasExtractor),
-            ...await Common.FetchMangasSinglePageCSS.call(this, provider, '/read/shonenjump/section/free-chapters', 'div#chpt_grid div.o_sortable a.o_chapters-link', MangasExtractor),
-            ...await Common.FetchMangasSinglePageCSS.call(this, provider, '/read/vizmanga/section/free-chapters', 'div.o_sort_container div.o_sortable a.o_chapters-link', MangasExtractor)
-        ].distinct();
+        const mangas = [
+            ...await Common.FetchMangasSinglePagesCSS.call(this, provider, ['/account/library'], 'table.purchase-table a', MangasExtractor),
+            ...await Common.FetchMangasSinglePagesCSS.call(this, provider, ['/account/library/sj'], 'table.purchase-table a', MangasExtractor),
+            ...await Common.FetchMangasSinglePagesCSS.call(this, provider, ['/read/shonenjump/section/free-chapters'], 'div#chpt_grid div.o_sortable a.o_chapters-link', MangasExtractor),
+            ...await Common.FetchMangasSinglePagesCSS.call(this, provider, ['/read/vizmanga/section/free-chapters'], 'div.o_sort_container div.o_sortable a.o_chapters-link', MangasExtractor)
+        ];
+        
+        // Replace .distinct() with custom deduplication
+        return removeDuplicates(mangas, (manga) => manga.Identifier);
     }
 
     public override async FetchChapters(manga: Manga): Promise<Chapter[]> {
@@ -97,6 +116,7 @@ export default class extends DecoratableMangaScraper {
         if (manga.Identifier.startsWith('/account/library')) {
             return await Common.FetchChaptersSinglePageCSS.call(this, manga, 'table.product-table tr', VolumesExtractor);
         }
+        return []; // Add return statement for all code paths
     }
 
     private async GetChapters(manga: Manga, hasAccess: boolean): Promise<Chapter[]> {
@@ -120,7 +140,9 @@ export default class extends DecoratableMangaScraper {
                 if (format && format.length > 1) {
                     return new Chapter(this, manga, targetUrl, 'Ch. ' + format[1].replace(/[-_]/g, '.'));
                 }
-            });
+                return null; // Add explicit return for else case
+            })
+            .filter(chapter => chapter !== null); // Filter out null chapters
     }
 
     private async GetUserInfos() {
