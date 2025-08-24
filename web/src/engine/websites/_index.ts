@@ -215,6 +215,7 @@ export { default as InManga } from './InManga';
 export { default as InmortalScan } from './InmortalScan';
 export { default as iqiyi } from './iqiyi';
 export { default as IrisScanlator } from './IrisScanlator';
+export { default as JNovelClub } from './J-NovelClub';
 export { default as JiangzaiToon } from './JiangzaiToon';
 export { default as JManga } from './JManga';
 export { default as JuinJutsuTeam } from './JuinJutsuTeam';
