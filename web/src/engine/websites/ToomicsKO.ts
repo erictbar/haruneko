@@ -3,7 +3,7 @@ import icon from './ToomicsKO.webp';
 import { type MangaPlugin } from '../providers/MangaPlugin';
 import { DecoratableMangaScraper, Manga } from '../providers/MangaPlugin';
 import { Fetch, FetchCSS, FetchWindowScript } from '../platform/FetchProvider';
-import * as Toomics from './decorators/ToomicsBase';
+import * as Toomics from './templates/ToomicsBase';
 import * as Common from './decorators/Common';
 
 type TPagingData = {
@@ -19,7 +19,7 @@ function ChapterExtractor(anchor: HTMLAnchorElement) {
     };
 }
 
-@Common.ChaptersSinglePageCSS('div.episode__body ul.eps li#eps_not_selected a', ChapterExtractor)
+@Common.ChaptersSinglePageCSS('div.episode__body ul.eps li#eps_not_selected a', undefined, ChapterExtractor)
 @Common.PagesSinglePageCSS('div.viewer__img img', Toomics.PageExtractor)
 @Common.ImageAjax()
 export default class extends DecoratableMangaScraper {
@@ -29,7 +29,7 @@ export default class extends DecoratableMangaScraper {
     private readonly mangaRegex3 = new RegExp(`^${this.URI.origin}/webtoon/bridge/type/\\d+/toon/\\d+$`); //https://www.toomics.com/webtoon/bridge/type/2/toon/76766 => /webtoon/episode/toon/7676
 
     public constructor() {
-        super('toomics-ko', `Toomics (Korean)`, 'https://www.toomics.com', Tags.Language.Korean, Tags.Media.Manhwa, Tags.Source.Official);
+        super('toomics-ko', 'Toomics (Korean)', 'https://www.toomics.com', Tags.Language.Korean, Tags.Media.Manhwa, Tags.Source.Official);
     }
 
     public override get Icon() {
@@ -103,15 +103,14 @@ export default class extends DecoratableMangaScraper {
     }
 
     private async FetchPOST(path: string, params: string): Promise<string> {
-        const request = new Request(new URL(path, this.URI), {
+        const response = await Fetch(new Request(new URL(path, this.URI), {
             method: 'POST',
             credentials: 'same-origin',
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded'
             },
             body: params
-        });
-        const response = await Fetch(request);
+        }));
         return response.text();
     }
 }
