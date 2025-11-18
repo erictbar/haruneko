@@ -29,11 +29,11 @@ export async function FetchChapters(this: DecoratableMangaScraper, manga: Manga,
 }
 
 @Common.MangaCSS(/^{origin}\/manga\/[^/]+$/, 'nav ol li:last-of-type a')
-@Common.MangasMultiPageCSS('/manga/page/{page}', 'div.cardlist a')
+@Common.MangasMultiPageCSS('div.cardlist a', Common.PatternLinkGenerator('/manga/page/{page}'))
 @Common.ImageAjax()
 export default class extends DecoratableMangaScraper {
 
-    private apiUrl = 'https://api-get-v2.mgsearcher.com/api/'; // https://m.g-mh.org/api/
+    private apiUrl = 'https://api-get-v3.mgsearcher.com/api/'; // https://m.g-mh.org/api/
     private imageCDN = {
         0: 'https://t40-1-4.g-mh.online',
         2: 'https://f40-1-4.g-mh.online',

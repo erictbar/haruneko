@@ -6,17 +6,17 @@ new TestFixture({
         title: 'Koreli Scans'
     },
     container: {
-        url: 'https://koreliscans.com/manga/45888549/',
-        id: JSON.stringify({ post: '3038', slug: '/manga/45888549/' }),
+        url: 'https://koreliscans.net/manga/lookism/',
+        id: '/manga/lookism/',
         title: 'Lookism'
     },
     child: {
-        id: '/manga/45888549/bolum-550/',
+        id: '/lookism-bolum-550/',
         title: 'Bölüm 550'
     },
     entry: {
-        index: 0,
-        size: 1_211_298,
+        index: 4,
+        size: 818_988,
         type: 'image/webp'
     }
 }).AssertWebsite();

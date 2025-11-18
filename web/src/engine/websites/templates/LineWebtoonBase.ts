@@ -1,4 +1,4 @@
-import { Chapter, DecoratableMangaScraper, type Manga, type MangaPlugin, Page } from '../../providers/MangaPlugin';
+import { DecoratableMangaScraper, type MangaPlugin, type Manga, type Chapter, Page } from '../../providers/MangaPlugin';
 import * as Common from '../decorators/Common';
 import { Fetch, FetchCSS, FetchJSON, FetchWindowScript } from '../../platform/FetchProvider';
 import { Priority } from '../../taskpool/DeferredTask';
@@ -36,7 +36,9 @@ type ChapterInfo = {
 };
 
 @Common.MangasNotSupported()
+@Common.ChaptersMultiPageCSS('div.detail_body div.detail_lst ul li > a', Common.PatternLinkGenerator('{id}&page={page}'), 0, ChapterExtractor)
 export class LineWebtoonBase extends DecoratableMangaScraper {
+
     protected mangaRegexp = /[a-z]{2}\/[^/]+\/[^/]+\/list\?title_no=\d+$/;
     protected queryMangaTitleURI = 'div.info .subj';
     protected mangaLabelExtractor = Common.ElementLabelExtractor();

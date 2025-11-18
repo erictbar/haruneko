@@ -5,9 +5,13 @@ import { DecoratableMangaScraper, type Manga, type Chapter } from '../providers/
 import * as FlatManga from './templates/FlatManga';
 import * as Common from './decorators/Common';
 
-@Common.MangaCSS(FlatManga.pathManga, 'body title', (element: HTMLTitleElement) => element.text.split(' - ').at(0).trim())
-@Common.MangasSinglePagesCSS([ '/manga-list.html' ], 'div.container a[data-toggle="mangapop"]:not([data-original-title=""])')
-@Common.PagesSinglePageCSS(FlatManga.queryPages)
+@Common.MangaCSS<HTMLImageElement>(FlatManga.pathManga, 'img.thumbnail', (img, uri) => ({ id: uri.pathname, title: img.title.trim() }))
+@Common.MangasSinglePageCSS('/manga-list.html', 'div.container a[data-toggle="mangapop"]:not([data-original-title=""])')
+@Common.PagesSinglePageJS(`
+    [...document.querySelectorAll('${FlatManga.queryPages}')]
+        .filter(image => image.dataset.src)
+        .map(image => window.atob(image.dataset.src));
+`, 1500)
 @Common.ImageAjax()
 export default class extends DecoratableMangaScraper {
 

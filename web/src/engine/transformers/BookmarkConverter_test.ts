@@ -9,6 +9,7 @@ import { Key } from '../SettingsGlobal';
 import { GetLocale } from '../../i18n/Localization';
 
 const legacyWebsiteIdentifierMapTestCases = [
+    { sourceID: 'allanimesite', targetID: 'allmanga' },
     { sourceID: 'apolltoons', targetID: 'mundomanhwa' },
     { sourceID: 'azoramanga', targetID: 'azoraworld' },
     { sourceID: 'bacamangaorg', targetID: 'bacamanga' },
@@ -20,7 +21,6 @@ const legacyWebsiteIdentifierMapTestCases = [
     { sourceID: 'firstkiss', targetID: 'likemanga' },
     { sourceID: 'flamescans-org', targetID: 'flamecomics' },
     { sourceID: 'galaxyaction', targetID: 'galaxymanga' },
-    { sourceID: 'gateanimemanga', targetID: 'gatemanga' },
     { sourceID: 'imperioscans', targetID: 'neroxus' },
     { sourceID: 'instamanhwa', targetID: 'xmanhwa' },
     { sourceID: 'kissaway', targetID: 'klmanga' },
