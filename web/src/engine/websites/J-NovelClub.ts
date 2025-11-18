@@ -59,7 +59,7 @@ export default class extends DecoratableMangaScraper {
         }
 
         try {
-            const loginUrl = 'https://api.j-novel.club/api/auth/login';
+            const loginUrl = 'https://api.j-novel.club/app/v2/auth/login?format=json';
             const loginPayload = {
                 login: email,
                 password: password,
@@ -72,7 +72,8 @@ export default class extends DecoratableMangaScraper {
                     'Content-Type': 'application/json',
                     'Accept': 'application/json'
                 },
-                body: JSON.stringify(loginPayload)
+                body: JSON.stringify(loginPayload),
+                // Add format=json parameter as query param
             });
 
             if (response.ok) {
@@ -83,7 +84,8 @@ export default class extends DecoratableMangaScraper {
                 console.log(`[J-Novel Club] Successfully authenticated`);
                 return true;
             } else {
-                console.log(`[J-Novel Club] Authentication failed: ${response.status}`);
+                const errorText = await response.text();
+                console.log(`[J-Novel Club] Authentication failed: ${response.status} - ${errorText}`);
                 return false;
             }
         } catch (error) {
@@ -94,7 +96,15 @@ export default class extends DecoratableMangaScraper {
 
     // Helper method to create authenticated requests
     private createAuthenticatedRequest(url: string, options: RequestInit = {}): Request {
+        // Add format=json parameter if not already present
+        const urlObj = new URL(url);
+        if (!urlObj.searchParams.has('format')) {
+            urlObj.searchParams.set('format', 'json');
+        }
+
         const headers = {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
             ...options.headers,
         };
 
@@ -102,7 +112,7 @@ export default class extends DecoratableMangaScraper {
             headers['Authorization'] = `Bearer ${this.authToken}`;
         }
 
-        return new Request(url, {
+        return new Request(urlObj.toString(), {
             ...options,
             headers
         });
@@ -139,8 +149,8 @@ export default class extends DecoratableMangaScraper {
             console.log(`[J-Novel Club] Using part slug: ${partSlug}`);
             
             // Use J-Novel Club API to fetch content
-            const apiBaseUrl = 'https://api.j-novel.club/api';
-            const embedBaseUrl = 'https://labs.j-novel.club/embed';
+            const apiBaseUrl = 'https://api.j-novel.club/app/v2';
+            const embedBaseUrl = 'https://labs.j-novel.club/embed/v2';
             
             // First, try to get part data to find the actual part ID
             // The part slug from URL might need to be converted to part ID
@@ -149,10 +159,14 @@ export default class extends DecoratableMangaScraper {
             
             let partData;
             try {
-                const partResponse = await fetch(partDataUrl);
+                const partRequest = this.createAuthenticatedRequest(partDataUrl);
+                const partResponse = await fetch(partRequest);
                 if (partResponse.ok) {
                     partData = await partResponse.json();
                     console.log(`[J-Novel Club] Part data:`, partData);
+                } else {
+                    const errorText = await partResponse.text();
+                    console.log(`[J-Novel Club] Part data fetch failed: ${partResponse.status} - ${errorText}`);
                 }
             } catch (error) {
                 console.log(`[J-Novel Club] Could not fetch part data: ${error}`);
