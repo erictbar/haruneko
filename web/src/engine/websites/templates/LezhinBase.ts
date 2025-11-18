@@ -1,7 +1,7 @@
 import type { Tag } from '../../Tags';
 import icon from '../Lezhin.webp';
 import { Fetch, FetchJSON, FetchNextJS, FetchWindowScript } from '../../platform/FetchProvider';
-import { type Chapter, DecoratableMangaScraper, Manga, Page, type MangaPlugin } from '../../providers/MangaPlugin';
+import { Chapter, DecoratableMangaScraper, Manga, Page, type MangaPlugin } from '../../providers/MangaPlugin';
 import { WebsiteResourceKey as W } from '../../../i18n/ILocale';
 import type { Priority } from '../../taskpool/TaskPool';
 import * as Common from '../decorators/Common';
@@ -12,11 +12,28 @@ import { Exception } from '../../Error';
 // TODO : Handle Password and login change in plugin config
 // TODO : Update CDN & force language after login attempt
 
-function ChapterExtractor(anchor: HTMLAnchorElement) {
-    return {
-        id: anchor.pathname,
-        title: anchor.querySelector('div[class*=episodeListContentsItem__title]').textContent.trim()
-    };
+type NextJSEpisode = {
+    id: number
+    name: string
+    display: {
+        displayName: string
+        title: string
+    }
+}
+
+type NextJSPageProps = {
+    entity?: {
+        meta: {
+            content: {
+                episodes: NextJSEpisode[]
+            }
+        }
+    }
+    meta?: {
+        content: {
+            episodes: NextJSEpisode[]
+        }
+    }
 }
 
 function LoginScript(username: string, password: string,): string {
@@ -138,7 +155,6 @@ type LoginResult = {
     appConfig: AuthData
 }
 
-@Common.ChaptersSinglePageCSS('ul[class*=episodeListContents__list] li a', undefined, ChapterExtractor)
 export class LezhinBase extends DecoratableMangaScraper {
     protected locale: string;
     private readonly apiUrl = 'https://www.lezhinus.com/lz-api/v2/';
@@ -166,11 +182,108 @@ export class LezhinBase extends DecoratableMangaScraper {
     }
 
     public override ValidateMangaURL(url: string): boolean {
-        return new RegExpSafe(`^${this.URI.origin}/${this.languagePath}/comic/[^/]+$`).test(url);
+        // Accept both manga page URLs and direct chapter (library) URLs
+        const base = new RegExpSafe(`^${this.URI.origin}/${this.languagePath}/comic/[^/]+$`).test(url);
+        const chapter = new RegExpSafe(`^${this.URI.origin}/${this.languagePath}/library/comic/${this.locale}/[^/]+(?:/[^/]+)?$`).test(url);
+        return base || chapter;
     }
 
     public override async FetchManga(provider: MangaPlugin, url: string): Promise<Manga> {
+        // If a chapter URL was provided, resolve title from the manga page but keep
+        // the original identifier (to carry the target episode into FetchChapters)
+        const uri = new URL(url);
+        const libraryChapterPattern = new RegExpSafe(`^/${this.languagePath}/library/comic/${this.locale}/([^/]+)/([^/]+)$`);
+        const match = uri.pathname.match(libraryChapterPattern);
+
+        if (match) {
+            const alias = match[1];
+            const mangaPage = new URL(`/${this.languagePath}/comic/${alias}`, this.URI).href;
+            const { Title } = await Common.FetchMangaCSS.call(this, provider, mangaPage, 'h2[class*="episodeListDetail__title__"]');
+            // Keep original pathname (and search) as identifier to signal single-chapter intent
+            return new Manga(this, provider, uri.pathname + uri.search, Title);
+        }
+
         return Common.FetchMangaCSS.call(this, provider, url, 'h2[class*="episodeListDetail__title__"]');
+    }
+
+    public override async FetchChapters(manga: Manga): Promise<Chapter[]> {
+        // Support direct chapter URLs: /{lang}/library/comic/{locale}/{alias}/{episode}
+        const libraryChapterPattern = new RegExpSafe(`^/${this.languagePath}/library/comic/${this.locale}/([^/]+)/([^/]+)$`);
+        const libMatch = manga.Identifier.match(libraryChapterPattern);
+
+        if (libMatch) {
+            const alias = libMatch[1];
+            const episodeName = libMatch[2];
+            // Create a synthetic single-chapter list for this episode
+            const id = `/${this.languagePath}/library/comic/${this.locale}/${alias}/${episodeName}`;
+            const title = episodeName;
+            return [ new Chapter(this, manga, id, title) ];
+        }
+
+        // No episodes API exists - must scrape from DOM (virtualized list shows ~15 visible)
+        const comicAlias = manga.Identifier.split('/').pop();
+        const request = new Request(new URL(manga.Identifier, this.URI));
+        
+        const script = `
+            new Promise(async (resolve, reject) => {
+                try {
+                    // Wait for initial render
+                    await new Promise(r => setTimeout(r, 2000));
+                    
+                    // Extract all visible episode links
+                    const allLinks = document.querySelectorAll('a[href*="/comic/${comicAlias}/"]');
+                    const episodeMap = new Map();
+                    
+                    allLinks.forEach(link => {
+                        const href = link.getAttribute('href');
+                        if (!href) return;
+                        
+                        const episodeName = href.split('/').pop();
+                        if (episodeName && !episodeMap.has(episodeName)) {
+                            let title = episodeName;
+                            
+                            // Try to extract title from link
+                            const titleElem = link.querySelector('[class*="displayName"], [class*="title"], span, div');
+                            if (titleElem?.textContent?.trim()) {
+                                const text = titleElem.textContent.trim();
+                                if (text.length > 1) {
+                                    title = text;
+                                }
+                            }
+                            
+                            episodeMap.set(episodeName, title);
+                        }
+                    });
+                    
+                    const episodes = Array.from(episodeMap.entries()).map(([name, title]) => ({
+                        name,
+                        title
+                    }));
+                    
+                    resolve(episodes);
+                } catch (error) {
+                    reject(error);
+                }
+            });
+        `;
+        
+        try {
+            const episodes = await FetchWindowScript<Array<{ name: string, title: string }>>(request, script, 10000);
+            
+            if (episodes.length === 0) {
+                throw new Error('No episodes found on page');
+            }
+            
+            console.log(`Found ${episodes.length} episodes from DOM (Note: Lezhin uses virtual scrolling - only visible episodes are available)`);
+            
+            return episodes.map(episode => {
+                const id = `/${this.languagePath}/comic/${comicAlias}/${episode.name}`;
+                return new Chapter(this, manga, id, episode.title);
+            });
+        } catch (error) {
+            console.error(`Failed to scrape episodes: ${error.message}`);
+            throw new Error(`Failed to fetch episodes for ${comicAlias}: ${error.message}`);
+        }
     }
 
     public override async FetchMangas(provider: MangaPlugin): Promise<Manga[]> {
@@ -217,7 +330,13 @@ export class LezhinBase extends DecoratableMangaScraper {
 
         //if we are logged check if purchased
         if (this.tokenProvider.IsLogged) {
-            const uri = new URL(`https://www.lezhinus.com/lz-api/contents/v3/${chapter.Parent.Identifier.split('/').at(-1)}/episodes/${chapter.Identifier.split('/').at(-1)}`);
+            // Resolve alias robustly for both base and library paths
+            const parentParts = chapter.Parent.Identifier.split('/').filter(Boolean);
+            const comicIdx = parentParts.indexOf('comic');
+            const alias = comicIdx >= 0
+                ? (parentParts[comicIdx + 1] === this.locale ? parentParts[comicIdx + 2] : parentParts[comicIdx + 1])
+                : parentParts.at(-1);
+            const uri = new URL(`https://www.lezhinus.com/lz-api/contents/v3/${alias}/episodes/${chapter.Identifier.split('/').at(-1)}`);
             uri.searchParams.set('referrerViewType', 'NORMAL');
             uri.searchParams.set('objectType', 'comic');
             const { data: { episode: { isCollected } } } = await this.FetchAPI<APIEpisode>(uri, {
@@ -231,7 +350,18 @@ export class LezhinBase extends DecoratableMangaScraper {
         uri.search = new URLSearchParams({
             platform: 'web',
             store: 'web',
-            alias: chapter.Parent.Identifier.split('/').pop(),
+            // Extract alias robustly from parent identifier for both base and library paths
+            alias: (() => {
+                const parts = chapter.Parent.Identifier.split('/').filter(Boolean);
+                const idx = parts.indexOf('comic');
+                if (idx >= 0) {
+                    // library path: .../library/comic/{locale}/{alias}/...
+                    if (parts[idx + 1] === this.locale) return parts[idx + 2];
+                    // base path: .../{lang}/comic/{alias}
+                    return parts[idx + 1];
+                }
+                return parts.pop();
+            })(),
             name: chapter.Identifier.split('/').pop(),
             preload: 'false',
             type: 'comic_episode'

@@ -1,4 +1,4 @@
-import { DecoratableMangaScraper, type MangaPlugin, type Manga, type Chapter, Page } from '../../providers/MangaPlugin';
+import { DecoratableMangaScraper, type MangaPlugin, type Manga, Chapter, Page } from '../../providers/MangaPlugin';
 import * as Common from '../decorators/Common';
 import { Fetch, FetchCSS, FetchJSON, FetchWindowScript } from '../../platform/FetchProvider';
 import { Priority } from '../../taskpool/DeferredTask';
@@ -35,13 +35,20 @@ type ChapterInfo = {
     readableProduct: boolean;
 };
 
+function ChapterExtractor(element: HTMLAnchorElement) {
+    const chapter = element.querySelector('span.tx');
+    let title = chapter ? chapter.textContent.trim() + ' - ' : '';
+    title += element.querySelector('span.subj span').textContent.trim();
+    const id = /'/.test(element.href) ? decodeURIComponent(element.href).match(/'([^']+)'/)[1] : element.pathname + element.search;
+    return { id, title };
+}
+
 @Common.MangasNotSupported()
 @Common.ChaptersMultiPageCSS('div.detail_body div.detail_lst ul li > a', Common.PatternLinkGenerator('{id}&page={page}'), 0, ChapterExtractor)
 export class LineWebtoonBase extends DecoratableMangaScraper {
 
     protected mangaRegexp = /[a-z]{2}\/[^/]+\/[^/]+\/list\?title_no=\d+$/;
-    protected queryMangaTitleURI = 'div.info .subj';
-    protected mangaLabelExtractor = Common.ElementLabelExtractor();
+    private queryMangaTitleURI = 'div.info .subj';
     private readonly interactionTaskPool = new TaskPool(1, RateLimit.PerMinute(30));
 
     // Get NEO_SES from environment variable
@@ -90,7 +97,7 @@ export class LineWebtoonBase extends DecoratableMangaScraper {
 
     public override async FetchManga(provider: MangaPlugin, url: string): Promise<Manga> {
         return this.interactionTaskPool.Add(async () => 
-            Common.FetchMangaCSS.call(this, provider, url, this.queryMangaTitleURI, this.mangaLabelExtractor, true, false), 
+            Common.FetchMangaCSS.call(this, provider, url, this.queryMangaTitleURI, Common.WebsiteInfoExtractor({ includeSearch: true })), 
             Priority.Normal
         );
     }
