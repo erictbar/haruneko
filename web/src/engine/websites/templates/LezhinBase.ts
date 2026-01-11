@@ -182,21 +182,37 @@ export class LezhinBase extends DecoratableMangaScraper {
     }
 
     public override ValidateMangaURL(url: string): boolean {
-        // Accept both manga page URLs and direct chapter (library) URLs
+        // Accept both manga page URLs and direct chapter URLs (old and new formats)
         const base = new RegExpSafe(`^${this.URI.origin}/${this.languagePath}/comic/[^/]+$`).test(url);
+        const oldChapter = new RegExpSafe(`^${this.URI.origin}/${this.languagePath}/comic/[^/]+/[^/]+$`).test(url);
         const chapter = new RegExpSafe(`^${this.URI.origin}/${this.languagePath}/library/comic/${this.locale}/[^/]+(?:/[^/]+)?$`).test(url);
-        return base || chapter;
+        return base || oldChapter || chapter;
     }
 
     public override async FetchManga(provider: MangaPlugin, url: string): Promise<Manga> {
         // If a chapter URL was provided, resolve title from the manga page but keep
         // the original identifier (to carry the target episode into FetchChapters)
         const uri = new URL(url);
+        
+        // Check for new library format: /en/library/comic/en-US/alias/episode
         const libraryChapterPattern = new RegExpSafe(`^/${this.languagePath}/library/comic/${this.locale}/([^/]+)/([^/]+)$`);
-        const match = uri.pathname.match(libraryChapterPattern);
+        const libMatch = uri.pathname.match(libraryChapterPattern);
+        
+        // Check for old format: /en/comic/alias/episodeId
+        const oldChapterPattern = new RegExpSafe(`^/${this.languagePath}/comic/([^/]+)/([^/]+)$`);
+        const oldMatch = uri.pathname.match(oldChapterPattern);
 
-        if (match) {
-            const alias = match[1];
+        if (libMatch) {
+            const alias = libMatch[1];
+            const mangaPage = new URL(`/${this.languagePath}/comic/${alias}`, this.URI).href;
+            const { Title } = await Common.FetchMangaCSS.call(this, provider, mangaPage, 'h2[class*="episodeListDetail__title__"]');
+            // Keep original pathname (and search) as identifier to signal single-chapter intent
+            return new Manga(this, provider, uri.pathname + uri.search, Title);
+        }
+        
+        if (oldMatch) {
+            const alias = oldMatch[1];
+            const episodeId = oldMatch[2];
             const mangaPage = new URL(`/${this.languagePath}/comic/${alias}`, this.URI).href;
             const { Title } = await Common.FetchMangaCSS.call(this, provider, mangaPage, 'h2[class*="episodeListDetail__title__"]');
             // Keep original pathname (and search) as identifier to signal single-chapter intent
@@ -217,6 +233,19 @@ export class LezhinBase extends DecoratableMangaScraper {
             // Create a synthetic single-chapter list for this episode
             const id = `/${this.languagePath}/library/comic/${this.locale}/${alias}/${episodeName}`;
             const title = episodeName;
+            return [ new Chapter(this, manga, id, title) ];
+        }
+        
+        // Support old-style direct chapter URLs: /{lang}/comic/{alias}/{episodeId}
+        const oldChapterPattern = new RegExpSafe(`^/${this.languagePath}/comic/([^/]+)/([^/]+)$`);
+        const oldMatch = manga.Identifier.match(oldChapterPattern);
+        
+        if (oldMatch) {
+            const alias = oldMatch[1];
+            const episodeId = oldMatch[2];
+            // Create a synthetic single-chapter list for this episode
+            const id = `/${this.languagePath}/comic/${alias}/${episodeId}`;
+            const title = `Episode ${episodeId}`;
             return [ new Chapter(this, manga, id, title) ];
         }
 
