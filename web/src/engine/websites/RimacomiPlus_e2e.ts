@@ -11,12 +11,12 @@ new TestFixture({
         title: '包帯ごっこ',
     },
     child: {
-        id: '/cocohana/episodes/7cba174d95a20/',
+        id: '/cocohana/episodes/5e926ec620784/',
         title: '第1話',
     },
     entry: {
         index: 1,
-        size: 1_627_547,
+        size: 1_763_144,
         type: 'image/png',
     }
 }).AssertWebsite();
