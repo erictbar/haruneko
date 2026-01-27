@@ -1,56 +1,38 @@
 import { Tags } from '../Tags';
 import icon from './VizShonenJump.webp';
-import { Chapter, DecoratableMangaScraper, type Manga, Page, type MangaPlugin } from '../providers/MangaPlugin';
-import { Fetch, FetchCSS, FetchWindowScript } from '../platform/FetchProvider';
+import { type Chapter, DecoratableMangaScraper, type Manga, Page, type MangaPlugin } from '../providers/MangaPlugin';
+import { Fetch, FetchWindowScript } from '../platform/FetchProvider';
 import type { Priority } from '../taskpool/DeferredTask';
 import * as Common from './decorators/Common';
 import exifr from 'exifr';
 import DeScramble from '../transformers/ImageDescrambler';
+import { RateLimit } from '../taskpool/RateLimit';
 
-// Add this import for RegExpSafe
-const RegExpSafe = RegExp;
-
-type UserInfos = {
-    isLoggedIn: boolean,
-    isAdult: boolean,
-    isMember: boolean,
-    isVizManga: boolean
-}
+// TODO: Check for possible revision
 
 type PagesInfos = {
     pagesCount: number,
-    mangaID: string
-}
+    mangaID: string;
+};
 
 type ExifData = {
     ImageUniqueID: string,
     ImageWidth: number,
-    ImageHeight: number
-}
-
-const UserInfoScript = `
-    new Promise ( resolve => {
-        resolve({
-            isLoggedIn : /[1-9]+/.test(user_id),
-            isAdult : adult === true,
-            isMember : is_sj_subscriber === true,
-            isVizManga : is_vm_subscriber === true
-        });
-    });
-`;
+    ImageHeight: number;
+};
 
 const PagesScript = `
-    new Promise ( resolve => {
+    new Promise(resolve => {
         resolve({
-            pagesCount : pages,
-            mangaID : mangaCommonId ?? currentMCid
+            pagesCount: pages,
+            mangaID: mangaCommonId ?? currentMCid
         });
     });
 `;
 
 const MangasExtractor = Common.AnchorInfoExtractor(false, '.display-label');
 
-function VolumesExtractor(row: HTMLTableRowElement) {
+function VolumeExtractor(row: HTMLTableRowElement) {
     const anchor = row.querySelector<HTMLAnchorElement>('a.btn-primary-dark');
     return {
         id: anchor.pathname + anchor.search,
@@ -58,24 +40,23 @@ function VolumesExtractor(row: HTMLTableRowElement) {
     };
 }
 
-// Helper function to remove duplicates
-function removeDuplicates<T>(array: T[], keySelector: (item: T) => string = (item) => JSON.stringify(item)): T[] {
-    const seen = new Set<string>();
-    return array.filter(item => {
-        const key = keySelector(item);
-        if (seen.has(key)) {
-            return false;
-        }
-        seen.add(key);
-        return true;
-    });
+function ChapterExtractor(anchor: HTMLAnchorElement) {
+    return {
+        id: anchor.dataset.targetUrl.match(/['"](\/(shonenjump|vizmanga)[^']+)['"]/)?.at(1) ?? anchor.dataset.targetUrl,
+        title: (anchor.querySelector<HTMLElement>('.disp-id, tr.o_chapter td > div')?.textContent ?? anchor.text).trim()
+    };
 }
 
 export default class extends DecoratableMangaScraper {
-    private userInfos: UserInfos;
+
+    private readonly patterns = new Map<RegExp, string>([
+        [new RegExp(`^${this.URI.origin}/(shonenjump|vizmanga)/chapters/[^/]+$`), 'section#series-intro div h2'],
+        [new RegExp(`^${this.URI.origin}/account/library/(gn|sj)/[^/]+$`), 'body > div.row h3.type-md'],
+    ]);
 
     public constructor() {
-        super('vizshonenjump', `Viz - Shonen Jump`, 'https://www.viz.com', Tags.Language.English, Tags.Media.Manga, Tags.Source.Official, Tags.Accessibility.RegionLocked);
+        super('vizshonenjump', 'Viz - Shonen Jump', 'https://www.viz.com', Tags.Language.English, Tags.Media.Manga, Tags.Source.Official, Tags.Accessibility.RegionLocked);
+        this.imageTaskPool.RateLimit = new RateLimit(4, 1);
     }
 
     public override get Icon() {
@@ -83,77 +64,32 @@ export default class extends DecoratableMangaScraper {
     }
 
     public override ValidateMangaURL(url: string): boolean {
-        const mangaRegexp = new RegExpSafe(`^${this.URI.origin}/(shonenjump|vizmanga)/chapters/[^/]+$`);
-        const libraryRegexp = new RegExpSafe(`^${this.URI.origin}/account/library/(gn|sj)/[^/]+$`);
-        return mangaRegexp.test(url) || libraryRegexp.test(url);
+        return this.patterns.keys().some(pattern => pattern.test(url));
     }
 
     public override async FetchManga(provider: MangaPlugin, url: string): Promise<Manga> {
-        const mangaRegexp = new RegExpSafe(`^${this.URI.origin}/(shonenjump|vizmanga)/chapters/[^/]+$`);
-        return mangaRegexp.test(url) ? await Common.FetchMangaCSS.call(this, provider, url, 'section#series-intro div h2') : await Common.FetchMangaCSS.call(this, provider, url, 'body > div.row h3.type-md');
+        const pattern = this.patterns.keys().find(pattern => pattern.test(url));
+        return Common.FetchMangaCSS.call(this, provider, url, this.patterns.get(pattern));
     }
 
     public override async FetchMangas(provider: MangaPlugin): Promise<Manga[]> {
-        const mangas = [
-            ...await Common.FetchMangasSinglePagesCSS.call(this, provider, ['/account/library'], 'table.purchase-table a', MangasExtractor),
-            ...await Common.FetchMangasSinglePagesCSS.call(this, provider, ['/account/library/sj'], 'table.purchase-table a', MangasExtractor),
-            ...await Common.FetchMangasSinglePagesCSS.call(this, provider, ['/read/shonenjump/section/free-chapters'], 'div#chpt_grid div.o_sortable a.o_chapters-link', MangasExtractor),
-            ...await Common.FetchMangasSinglePagesCSS.call(this, provider, ['/read/vizmanga/section/free-chapters'], 'div.o_sort_container div.o_sortable a.o_chapters-link', MangasExtractor)
-        ];
-        
-        // Replace .distinct() with custom deduplication
-        return removeDuplicates(mangas, (manga) => manga.Identifier);
+        return [
+            ...await Common.FetchMangasSinglePageCSS.call(this, provider, '/read/shonenjump/section/free-chapters', 'div#chpt_grid div.o_sortable a.o_chapters-link', MangasExtractor),
+            ...await Common.FetchMangasSinglePageCSS.call(this, provider, '/read/vizmanga/section/free-chapters', 'div.o_sort_container div.o_sortable a.o_chapters-link', MangasExtractor),
+            ...await Common.FetchMangasMultiPageCSS.call(this, provider, 'table.purchase-table a', Common.StaticLinkGenerator('/account/library', '/account/library/sj'), 0, MangasExtractor),
+        ].distinct();
     }
 
     public override async FetchChapters(manga: Manga): Promise<Chapter[]> {
-        await this.GetUserInfos();
-        if (manga.Identifier.startsWith('/shonenjump/chapters')) {
-            return await this.GetChapters(manga, this.userInfos.isMember);
-        }
-        if (manga.Identifier.startsWith('/vizmanga/chapters')) {
-            return await this.GetChapters(manga, this.userInfos.isVizManga);
-        }
-        if (manga.Identifier.startsWith('/account/library')) {
-            return await Common.FetchChaptersSinglePageCSS.call(this, manga, 'table.product-table tr', VolumesExtractor);
-        }
-        return []; // Add return statement for all code paths
-    }
-
-    private async GetChapters(manga: Manga, hasAccess: boolean): Promise<Chapter[]> {
-        const chapters = await FetchCSS<HTMLAnchorElement>(new Request(new URL(manga.Identifier, this.URI)), 'div > a.o_chapter-container[data-target-url], tr.o_chapter td.ch-num-list-spacing a.o_chapter-container[data-target-url]');
-        return chapters
-            .filter(element => {
-                if (/javascript:.*join/i.test(element.href)) {
-                    return hasAccess;
-                }
-                // free
-                return true;
-            })
-            .map(chapter => {
-                const targetUrl = /javascript/.test(chapter.dataset.targetUrl) ? chapter.dataset.targetUrl.match(/['"](\/(shonenjump|vizmanga)[^']+)['"]/)[1] : chapter.dataset.targetUrl;
-                const formatNode = chapter.querySelector<HTMLElement>('.disp-id');
-                if (formatNode) {
-                    return new Chapter(this, manga, targetUrl, formatNode.innerText.trim());
-                }
-
-                const format = chapter.dataset.targetUrl.match(/chapter-([-_0-9]+)\//);
-                if (format && format.length > 1) {
-                    return new Chapter(this, manga, targetUrl, 'Ch. ' + format[1].replace(/[-_]/g, '.'));
-                }
-                return null; // Add explicit return for else case
-            })
-            .filter(chapter => chapter !== null); // Filter out null chapters
-    }
-
-    private async GetUserInfos() {
-        this.userInfos = await FetchWindowScript<UserInfos>(new Request(new URL(this.URI)), UserInfoScript, 2500);
+        return /^\/(shonenjump|vizmanga)\/chapters/.test(manga.Identifier)
+            ? Common.FetchChaptersSinglePageCSS.call(this, manga, 'div > a.o_chapter-container[data-target-url], tr.o_chapter td.ch-num-list-spacing a.o_chapter-container[data-target-url]', undefined, ChapterExtractor)
+            : Common.FetchChaptersSinglePageCSS.call(this, manga, 'table.product-table tr', undefined, VolumeExtractor);
     }
 
     public override async FetchPages(chapter: Chapter): Promise<Page[]> {
         const chapterurl = new URL(chapter.Identifier, this.URI);
         const { pagesCount, mangaID } = await FetchWindowScript<PagesInfos>(new Request(chapterurl), PagesScript, 1500);
-
-        const pages = Array(pagesCount+1).fill(0).map((_, index) => {
+        const pages = Array(pagesCount + 1).fill(0).map((_, index) => {
             const url = new URL('/manga/get_manga_url', this.URI);
             url.searchParams.set('device_id', '3');
             url.searchParams.set('manga_id', mangaID);
@@ -161,70 +97,66 @@ export default class extends DecoratableMangaScraper {
             return new Page(this, chapter, url, { Referer: chapterurl.href });
         });
 
-        return pages;
+        //test last page
+        return await this.TestPage(pages.at(-1)) ? pages : pages.slice(0, -1);
+    }
+
+    private async TestPage(page: Page): Promise<boolean> {
+        try {
+            const url = await (await Fetch(new Request(page.Link, { headers: { Referer: page.Parameters.Referer, } }))).text();
+            await Fetch(new Request(url, { method: 'HEAD', headers: { Referer: page.Parameters.Referer } }));
+            return true;
+        } catch {
+            return false;
+        }
     }
 
     public override async FetchImage(page: Page, priority: Priority, signal: AbortSignal): Promise<Blob> {
-
-        const buffer = await this.imageTaskPool.Add(async () => {
-            let response = await Fetch(new Request(page.Link, {
+        const blob = await this.imageTaskPool.Add(async () => {
+            const init = {
                 signal,
                 headers: {
                     Referer: page.Parameters.Referer,
-                    Origin: this.URI.origin,
                 }
-            }));
-
-            const img_url = await response.text();
-            response = await Fetch(new Request(img_url, {
-                signal,
-                headers: {
-                    Referer: page.Parameters.Referer,
-                    Origin: this.URI.origin,
-                    crossOrigin: 'Anonymous'
-                }
-            }));
-            return await response.arrayBuffer();
+            };
+            const url = await (await Fetch(new Request(page.Link, init))).text();
+            const response = await Fetch(new Request(url, init));
+            return response.blob();
 
         }, priority, signal);
 
-        const tags: ExifData = await exifr.parse(buffer);
-        const EXIFWIDTH = tags.ImageWidth;
-        const EXIFHEIGHT = tags.ImageHeight;
-        const shuffleMap = tags.ImageUniqueID.split(':');
+        const tags: ExifData = await exifr.parse(blob);
+        const canvasWidth = tags.ImageWidth;
+        const canvasHeight = tags.ImageHeight;
+        const shuffleMap = tags.ImageUniqueID.split(':').map(value => parseInt(value, 16));
 
-        return DeScramble(new ImageData(EXIFWIDTH, EXIFHEIGHT ), async (_, ctx) => {
-            const blob = await Common.GetTypedData(buffer);
-            const bitmap = await createImageBitmap(blob);
-            const x_split = Math.floor(EXIFWIDTH / 10),
-                y_split = Math.floor(EXIFHEIGHT / 15);
+        const bitmap = await createImageBitmap(blob);
+        try {
+            return await DeScramble(new ImageData(canvasWidth, canvasHeight), async (_, ctx) => {
+                const blockWidth = Math.floor(canvasWidth / 10);
+                const blockHeight = Math.floor(canvasHeight / 15);
 
-            ctx.clearRect(0, 0, EXIFWIDTH, EXIFHEIGHT);
+                ctx.drawImage(bitmap, 0, 0, canvasWidth, blockHeight, 0, 0, canvasWidth, blockHeight);
+                ctx.drawImage(bitmap, 0, blockHeight + 10, blockWidth, canvasHeight - 2 * blockHeight, 0, blockHeight, blockWidth, canvasHeight - 2 * blockHeight);
+                ctx.drawImage(bitmap, 0, 14 * (blockHeight + 10), canvasWidth, bitmap.height - 14 * (blockHeight + 10), 0, 14 * blockHeight, canvasWidth, bitmap.height - 14 * (blockHeight + 10));
+                ctx.drawImage(bitmap, 9 * (blockWidth + 10), blockHeight + 10, blockWidth + (canvasWidth - 10 * blockWidth), canvasHeight - 2 * blockHeight, 9 * blockWidth, blockHeight, blockWidth + (canvasWidth - 10 * blockWidth), canvasHeight - 2 * blockHeight);
 
-            //Draw borders
-            ctx.drawImage(bitmap, 0, 0, EXIFWIDTH, y_split, 0, 0, EXIFWIDTH, y_split);
-            ctx.drawImage(bitmap, 0, y_split + 10, x_split, EXIFHEIGHT - 2 * y_split, 0, y_split, x_split, EXIFHEIGHT - 2 * y_split);
-            ctx.drawImage(bitmap, 0, 14 * (y_split + 10), EXIFWIDTH, bitmap.height - 14 * (y_split + 10), 0, 14 * y_split, EXIFWIDTH, bitmap.height - 14 * (y_split + 10));
-            ctx.drawImage(bitmap, 9 * (x_split + 10), y_split + 10, x_split + (EXIFWIDTH - 10 * x_split), EXIFHEIGHT - 2 * y_split, 9 * x_split, y_split, x_split + (EXIFWIDTH - 10 * x_split), EXIFHEIGHT - 2 * y_split);
-
-            //Draw pieces
-            for (let m = 0; m < shuffleMap.length; m++) {
-                const piecevalue = parseInt(shuffleMap[m], 16);
-                ctx.drawImage(
-                    bitmap,
-                    Math.floor((m % 8 + 1) * (x_split + 10)),
-                    Math.floor((Math.floor(m / 8) + 1) * (y_split + 10)),
-                    Math.floor(x_split),
-                    Math.floor(y_split),
-                    Math.floor((piecevalue % 8 + 1) * x_split),
-                    Math.floor((Math.floor(piecevalue / 8) + 1) * y_split),
-                    Math.floor(x_split),
-                    Math.floor(y_split)
-                );
-            }
-
-        });
-
+                for (let index = 0; index < shuffleMap.length; index++) {
+                    ctx.drawImage(
+                        bitmap,
+                        Math.floor((index % 8 + 1) * (blockWidth + 10)),
+                        Math.floor((Math.floor(index / 8) + 1) * (blockHeight + 10)),
+                        blockWidth,
+                        blockHeight,
+                        Math.floor((shuffleMap[index] % 8 + 1) * blockWidth),
+                        Math.floor((Math.floor(shuffleMap[index] / 8) + 1) * blockHeight),
+                        blockWidth,
+                        blockHeight
+                    );
+                }
+            });
+        } finally {
+            bitmap.close();
+        }
     }
-
 }

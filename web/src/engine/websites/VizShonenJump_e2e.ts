@@ -1,6 +1,6 @@
 import { TestFixture } from '../../../test/WebsitesFixture';
 
-//ShonenJump
+// CASE: ShonenJump : correct page number
 new TestFixture({
     plugin: {
         id: 'vizshonenjump',
@@ -22,7 +22,29 @@ new TestFixture({
     }
 }).AssertWebsite();
 
-//VIZ
+// CASE : ShonenJump : incorrect page number
+new TestFixture({
+    plugin: {
+        id: 'vizshonenjump',
+        title: 'Viz - Shonen Jump'
+    },
+    container: {
+        url: 'https://www.viz.com/shonenjump/chapters/jojos-bizarre-adventure-part-5',
+        id: '/shonenjump/chapters/jojos-bizarre-adventure-part-5',
+        title: 'JoJo’s Bizarre Adventure: Part 5--Golden Wind'
+    },
+    child: {
+        id: '/shonenjump/jojos-bizarre-adventure-part-5-chapter-3/chapter/23088?action=read',
+        title: 'Ch. 3'
+    },
+    entry: {
+        index: 20,
+        size: 184_560,
+        type: 'image/png'
+    }
+}).AssertWebsite();
+
+// CASE: VIZ
 new TestFixture({
     plugin: {
         id: 'vizshonenjump',
