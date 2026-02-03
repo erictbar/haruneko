@@ -1,116 +1,90 @@
-//Comici.jp viewer based websites : BigComics, YoungChampion, YoungAnimal, ComicMedu, ComicRide
-
-import { Exception } from '../../Error';
 import { FetchCSS, FetchJSON } from '../../platform/FetchProvider';
-import { Page, Chapter, Manga, DecoratableMangaScraper, type MangaPlugin } from '../../providers/MangaPlugin';
+import { DecoratableMangaScraper, type Manga, Chapter, Page } from '../../providers/MangaPlugin';
 import type { Priority } from '../../taskpool/DeferredTask';
 import DeScramble from '../../transformers/ImageDescrambler';
 import * as Common from '../decorators/Common';
-import { WebsiteResourceKey as R } from '../../../i18n/ILocale';
 
-// TODO: Check for possible revision
-
-type APIResult<T> = {
-    result: T,
+type APIPages = {
     totalPages: number;
-};
-
-type APIPage = {
-    imageUrl: string,
-    scramble: string;
+    result: {
+        imageUrl: string;
+        scramble?: string;
+    }[];
 };
 
 type ScrambleData = {
     scramble: string;
 };
 
-function StripTrailingDash(text: string): string {
-    return text.replace(/\/$/, '');
-}
-function MangaInfoExtractor(element: HTMLElement) {
-    return {
-        id: StripTrailingDash(element.querySelector('a').pathname),
-        title: element.querySelector<HTMLHeadingElement>('h2.title-text').textContent.trim()
-    };
+type APIChapters = {
+    series: {
+        episodes: {
+            id: string;
+            title: string;
+        }[]
+    }
+};
+
+function StripTrailingSlash(pathname: string): string {
+    return pathname.replace(/\/$/, '');
 }
 
-function ChapterExtractor(element: HTMLElement) {
-    return {
-        id: new URL(element.dataset[ 'href' ]).pathname,
-        title: element.querySelector<HTMLSpanElement>('span.series-ep-list-item-h-text').textContent.trim()
-    };
-}
-
-@Common.MangasMultiPageCSS('/series/list?page={page}', 'div.series-box-vertical', 0, 1, 0, MangaInfoExtractor)
+@Common.MangaCSS(/^{origin}\/series\/[^/]+\/?$/, 'h1.series-h-title span:not([class])', (span, uri) => ({ id: StripTrailingSlash(uri.pathname), title: span.innerText.trim() }))
+@Common.MangasMultiPageCSS('div.series-box-vertical', Common.PatternLinkGenerator('/series/list?page={page}', 0), 0, div => ({
+    id: StripTrailingSlash(div.querySelector('a').pathname),
+    title: div.querySelector<HTMLHeadingElement>('h2.title-text').innerText.trim()
+}))
+@Common.ChaptersSinglePageCSS('div.series-ep-list a[data-href]', manga => `${manga.Identifier}/list`, a => ({
+    id: new URL(a.dataset.href).pathname,
+    title: a.querySelector<HTMLSpanElement>('span.series-ep-list-item-h-text').innerText.trim(),
+}))
 export class ComiciViewer extends DecoratableMangaScraper {
 
-    protected mangaRegexp = /\/series\/[^/]+(\/)?$/;//same website can provide manga links with and without trailing slash
-    private readonly scrambleMatrix = new Array(16).fill(null).map((_, index) => [ index / 4 >> 0, index % 4 >> 0 ]);
+    readonly #identityTileMap = new Array(16).fill(null).map((_, index) => ({ col: index / 4 >> 0, row: index % 4 >> 0 }));
+    #apiURL = this.URI;
 
-    public override ValidateMangaURL(url: string): boolean {
-        return this.mangaRegexp.test(url) && url.startsWith(this.URI.origin);
+    protected WithEndpointAPI(endpoint: string) {
+        this.#apiURL = new URL(endpoint, this.URI);
+        return this;
     }
 
-    public override async FetchManga(provider: MangaPlugin, url: string): Promise<Manga> {
-        const mangaUrl = new URL(url);
-        const [ title ] = await FetchCSS<HTMLHeadingElement>(new Request(mangaUrl), 'h1.series-h-title span:not([class])');
-        return new Manga(this, provider, StripTrailingDash(mangaUrl.pathname), title.textContent.trim());
+    protected WithChaptersFromAPI() {
+        this.FetchChapters = async (manga: Manga) => {
+            const { series: { episodes } } = await FetchJSON<APIChapters>(new Request(new URL(`./episodes?seriesHash=${manga.Identifier.split('/').at(-1)}&episodeFrom=1&episodeTo=9999`, this.#apiURL)));
+            return episodes.map(({ id, title }) => new Chapter(this, manga, `/episodes/${id}`, title));
+        };
+        return this;
     }
 
-    public override async FetchChapters(manga: Manga): Promise<Chapter[]> {
-        const data = await FetchCSS<HTMLAnchorElement>(new Request(new URL(`${manga.Identifier}/list`, this.URI)), 'div.series-ep-list a[data-href]');
-        return data.map(element => {
-            const { id, title } = ChapterExtractor.call(this, element);
-            return new Chapter(this, manga, id, title.replace(manga.Title, '').trim() || manga.Title);
-        });
+    #FetchContentInfo(chapter: Chapter, viewerId: string, userId: string, pageTo: number): Promise<APIPages> {
+        return FetchJSON<APIPages>(new Request(new URL(`./book/contentsInfo?comici-viewer-id=${viewerId}&user-id=${userId}&page-from=0&page-to=${pageTo}`, this.#apiURL), {
+            headers: {
+                Referer: new URL(chapter.Identifier, this.URI).href,
+            },
+        }));
     }
 
     public override async FetchPages(chapter: Chapter): Promise<Page<ScrambleData>[]> {
-        const [ viewer ] = await FetchCSS(new Request(new URL(chapter.Identifier, this.URI)), '#comici-viewer');
-        if (!viewer) throw new Exception(R.Plugin_Common_Chapter_UnavailableError);
-
-        const { result } = await this.FetchCoordInfo(viewer.getAttribute('comici-viewer-id'), viewer.dataset[ 'memberJwt' ], chapter);
-        return result.map(image => new Page<ScrambleData>(this, chapter, new URL(image.imageUrl), { scramble: image.scramble, Referer: this.URI.href }));
+        const [viewer] = await FetchCSS(new Request(new URL(chapter.Identifier, this.URI)), '#comici-viewer');
+        const viewerId = viewer.getAttribute('comici-viewer-id') ?? viewer.dataset.comiciViewerId;
+        const { totalPages } = await this.#FetchContentInfo(chapter, viewerId, viewer.dataset.memberJwt, 1);
+        const { result } = await this.#FetchContentInfo(chapter, viewerId, viewer.dataset.memberJwt, totalPages);
+        return result.map(({ imageUrl, scramble }) => new Page<ScrambleData>(this, chapter, new URL(imageUrl), { scramble, Referer: this.URI.href }));
     }
 
     public override async FetchImage(page: Page<ScrambleData>, priority: Priority, signal: AbortSignal): Promise<Blob> {
-        const data = await Common.FetchImageAjax.call(this, page, priority, signal);
-        return !page.Parameters?.scramble ? data : DeScramble(data, async (image, ctx) => {
-
-            const decodedArray = this.DecodeScrambleArray(page.Parameters.scramble);
+        const blob = await Common.FetchImageAjax.call(this, page, priority, signal);
+        return !page.Parameters?.scramble ? blob : DeScramble(blob, async (image, ctx) => {
+            const scrambleTileMap = page.Parameters.scramble.replace(/\s+/g, '').slice(1).slice(0, -1).split(',').map(index => this.#identityTileMap[index]);
             const tileWidth = Math.floor(image.width / 4);
             const tileHeight = Math.floor(image.height / 4);
-            for (let k = 0, i = 0; i < 4; i++) {
-                for (let j = 0; j < 4; j++) {
-                    ctx.drawImage(image, tileWidth * decodedArray[ k ][ 0 ], tileHeight * decodedArray[ k ][ 1 ], tileWidth, tileHeight, tileWidth * i, tileHeight * j, tileWidth, tileHeight);
-                    k++;
-                }
+            for (let index = 0; index < this.#identityTileMap.length; index++) {
+                const sourceOffsetX = scrambleTileMap[index].col * tileWidth;
+                const sourceOffsetY = scrambleTileMap[index].row * tileHeight;
+                const targetOffsetX = this.#identityTileMap[index].col * tileWidth;
+                const targetOffsetY = this.#identityTileMap[index].row * tileHeight;
+                ctx.drawImage(image, sourceOffsetX, sourceOffsetY, tileWidth, tileHeight, targetOffsetX, targetOffsetY, tileWidth, tileHeight);
             }
         });
-    }
-
-    private async FetchCoordInfo(viewerId: string, userId: string, chapter: Chapter): Promise<APIResult<APIPage[]>> {
-        //first request get page count
-        const { totalPages } = await FetchJSON<APIResult<APIPage[]>>(this.CreateChapterRequest('1', viewerId, userId, chapter));
-        //second request fetch actual pages data
-        return FetchJSON<APIResult<APIPage[]>>(this.CreateChapterRequest(totalPages.toString(), viewerId, userId, chapter));
-    }
-
-    private CreateChapterRequest(pageTo: string, viewerId: string, userId: string, chapter: Chapter): Request {
-        return new Request(new URL(`/book/contentsInfo?comici-viewer-id=${viewerId}&user-id=${userId}&page-from=0&page-to=${pageTo}`, this.URI), {
-            headers: {
-                Origin: this.URI.origin,
-                Referer: new URL(chapter.Identifier, this.URI).href
-            }
-        });
-    }
-
-    private DecodeScrambleArray(scramble: string): number[][] {
-        const decoded: number[][] = [];
-        const encoded = scramble.replace(/\s+/g, '').slice(1).slice(0, -1).split(',');
-        for (let i = 0; i < this.scrambleMatrix.length; i++) {
-            decoded.push(this.scrambleMatrix[ encoded.at(i) ]);
-        }
-        return decoded;
     }
 }

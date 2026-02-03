@@ -6,7 +6,7 @@ import { CheckAntiScrapingDetection, FetchRedirection } from './AntiScrapingDete
 import type { FeatureFlags } from '../FeatureFlags';
 import { Delay, SetTimeout, ClearTimeout } from '../BackgroundTimers';
 
-export type ScriptInjection<T extends void | JSONElement> = string | ((this: Window) => Promise<T>);
+export type ScriptInjection<T extends void | JSONElement> = string | ((this: Window) => T | Promise<T>);
 
 export abstract class FetchProvider {
 
@@ -136,7 +136,7 @@ export abstract class FetchProvider {
      * @param regex - ...
      */
     public async FetchRegex(request: Request, regex: RegExp): Promise<string[]> {
-        if (regex.flags.indexOf('g') == -1) {
+        if (regex.flags.indexOf('g') === -1) {
             throw new InternalError(`The provided RegExp must contain the global 'g' modifier!`);
         }
         const response = await fetch(request);

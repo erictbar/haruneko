@@ -1,50 +1,51 @@
 import { Tags } from '../Tags';
 import icon from './MangaUpGlobal.webp';
-import { Chapter, DecoratableMangaScraper, Manga, Page, type MangaPlugin } from '../providers/MangaPlugin';
-import * as Common from './decorators/Common';
-import { FetchProto } from '../platform/FetchProvider';
+import protoTypes from './MangaUpGlobal.proto?raw';
+import { GetBytesFromHex } from '../BufferEncoder';
 import { Exception } from '../Error';
 import { WebsiteResourceKey as W } from '../../i18n/ILocale';
-import protoTypes from './MangaUpGlobal.proto?raw';
 import type { Priority } from '../taskpool/DeferredTask';
-import { GetBytesFromHex } from '../BufferEncoder';
+import { Fetch, FetchProto } from '../platform/FetchProvider';
+import { DecoratableMangaScraper, type MangaPlugin, Manga, Chapter, Page } from '../providers/MangaPlugin';
+import * as Common from './decorators/Common';
 
 type APIMangaDetailView = {
-    titleName: string,
-    chapters: APIChapter[]
-}
+    titleName: string;
+    chapters: APIChapter[];
+};
 
 type APISearch = {
     titles: APIManga[]
-}
+};
 
 type APIManga = {
-    titleId: number,
-    titleName: string
-}
+    titleId: number;
+    titleName: string;
+};
 
 type APIChapter = {
-    id: number,
-    titleName: string,
+    id: number;
+    titleName: string;
     subName: string;
-}
+};
 
 type APIPages = {
     pageblocks: {
         pages: {
-            imageUrl: string,
-            encryptionKey: string,
-            iv: string | undefined
+            imageUrl: string;
+            encryptionKey: string;
+            iv: string | undefined;
         }[]
     }[]
-}
+};
 
-type PageParameters = null | {
-    keyData: string,
-    iv: string
-}
+type PageParameters = {
+    keyData?: string;
+    iv?: string;
+};
 
 export default class extends DecoratableMangaScraper {
+
     private readonly apiUrl = 'https://global-api.manga-up.com/api/';
     private readonly imagesCDN = 'https://global-img.manga-up.com/';
     private readonly secret = import.meta.env.VITE_MANGAUP_SECRET || '';
@@ -104,7 +105,7 @@ export default class extends DecoratableMangaScraper {
         return chapters.map(chapter => new Chapter(this, manga, chapter.id.toString(), [chapter.titleName, chapter.subName].join(' ').trim()));
     }
 
-    public override async FetchPages(chapter: Chapter): Promise<Page<CryptoParams>[]> {
+    public override async FetchPages(chapter: Chapter): Promise<Page<PageParameters>[]> {
         const request = new Request(this.buildApiUrl('./manga/viewer_v2', { 
             chapter_id: chapter.Identifier, 
             quality: 'high' 
@@ -120,20 +121,24 @@ export default class extends DecoratableMangaScraper {
             const params: PageParameters = page.iv ? {
                 keyData: page.encryptionKey,
                 iv: page.iv
-            } : null;
+            } : {};
             return new Page<PageParameters>(this, chapter, new URL(page.imageUrl, this.imagesCDN), params);
         });
     }
 
     public override async FetchImage(page: Page<PageParameters>, priority: Priority, signal: AbortSignal): Promise<Blob> {
-        const blob = await Common.FetchImageAjax.call(this, page, priority, signal, true);
-        const { keyData, iv } = page.Parameters ?? {};
-        if (keyData && iv) {
-            const encrypted = await blob.arrayBuffer();
-            const algorithm = { name: 'AES-CBC', iv: GetBytesFromHex(iv) };
-            const cryptoKey = await crypto.subtle.importKey('raw', GetBytesFromHex(keyData), algorithm, false, [ 'decrypt' ]);
-            const decrypted = await crypto.subtle.decrypt(algorithm, cryptoKey, encrypted);
-            return Common.GetTypedData(decrypted);
-        } else return blob;
+        const bytes = await this.imageTaskPool.Add(async () => {
+            const response = await Fetch(new Request(page.Link, { signal }));
+            return response.arrayBuffer();
+        }, priority, signal);
+        const { keyData, iv } = page.Parameters;
+        return keyData && iv ? this.DecryptImage(bytes, keyData, iv) : Common.GetTypedData(bytes);
+    }
+
+    private async DecryptImage(encrypted: ArrayBuffer, keyData: string, iv: string) {
+        const algorithm = { name: 'AES-CBC', iv: GetBytesFromHex(iv) };
+        const key = await crypto.subtle.importKey('raw', GetBytesFromHex(keyData), algorithm, false, [ 'decrypt' ]);
+        const decrypted = await crypto.subtle.decrypt(algorithm, key, encrypted);
+        return Common.GetTypedData(decrypted);
     }
 }
