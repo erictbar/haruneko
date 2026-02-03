@@ -1,35 +1,27 @@
 import { Tags } from '../Tags';
 import icon from './ToomicsKO.webp';
-import { type MangaPlugin } from '../providers/MangaPlugin';
-import { DecoratableMangaScraper, Manga } from '../providers/MangaPlugin';
+import { type MangaPlugin, Manga } from '../providers/MangaPlugin';
 import { Fetch, FetchCSS, FetchWindowScript } from '../platform/FetchProvider';
-import * as Toomics from './decorators/ToomicsBase';
 import * as Common from './decorators/Common';
+import { PageExtractor, ToomicsBase } from './templates/ToomicsBase';
 
 type TPagingData = {
     iInsertIdx: string
 }
-function ChapterExtractor(anchor: HTMLAnchorElement) {
-    return {
-        id: anchor.pathname,
-        title: [
-            anchor.querySelector<HTMLDivElement>('div.ep__episode').textContent.trim(),
-            anchor.querySelector<HTMLElement>('strong.ep__title').textContent.trim()
-        ].join(' ').trim()
-    };
-}
 
-@Common.ChaptersSinglePageCSS('div.episode__body ul.eps li#eps_not_selected a', ChapterExtractor)
-@Common.PagesSinglePageCSS('div.viewer__img img', Toomics.PageExtractor)
+@Common.PagesSinglePageCSS('div.viewer__img img', PageExtractor)
 @Common.ImageAjax()
-export default class extends DecoratableMangaScraper {
+export default class extends ToomicsBase {
 
     private readonly mangaRegex1 = new RegExp(`^${this.URI.origin}/webtoon/episode/toon/\\d+$`); //https://www.toomics.com/webtoon/episode/toon/7676 => /webtoon/episode/toon/7676
     private readonly mangaRegex2 = new RegExp(`^${this.URI.origin}/popular/popular_list/cut_list_idx/\\d+$`);//https://www.toomics.com/popular/popular_list/cut_list_idx/1648 => #1648 => /webtoon/episode/toon/7676
     private readonly mangaRegex3 = new RegExp(`^${this.URI.origin}/webtoon/bridge/type/\\d+/toon/\\d+$`); //https://www.toomics.com/webtoon/bridge/type/2/toon/76766 => /webtoon/episode/toon/7676
 
     public constructor() {
-        super('toomics-ko', `Toomics (Korean)`, 'https://www.toomics.com', Tags.Language.Korean, Tags.Media.Manhwa, Tags.Source.Official);
+        super('toomics-ko', 'Toomics (Korean)', 'https://www.toomics.com', Tags.Language.Korean, Tags.Media.Manhwa, Tags.Source.Official);
+        this.queryChapters = 'div.episode__body ul.eps li a';
+        this.queryChapterNum = 'strong.ep__title';
+        this.queryChapterTitle = 'div.ep__episode';
     }
 
     public override get Icon() {
@@ -103,15 +95,14 @@ export default class extends DecoratableMangaScraper {
     }
 
     private async FetchPOST(path: string, params: string): Promise<string> {
-        const request = new Request(new URL(path, this.URI), {
+        const response = await Fetch(new Request(new URL(path, this.URI), {
             method: 'POST',
             credentials: 'same-origin',
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded'
             },
             body: params
-        });
-        const response = await Fetch(request);
+        }));
         return response.text();
     }
 }
