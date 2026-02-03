@@ -684,6 +684,8 @@ export { default as ToCoronaEx } from './ToCoronaEx';
 export { default as TonariNoYoungJump } from './TonariNoYoungJump';
 export { default as TonizuToon } from './TonizuToon';
 export { default as ToomTam } from './ToomTam';
+export { default as Toomics } from './Toomics';
+export { default as ToomicsKO } from './ToomicsKO';
 export { default as Toondex } from './Toondex';
 export { default as ToonFR } from './ToonFR';
 export { default as ToonGod } from './ToonGod';
