@@ -35,15 +35,25 @@ export function SanitizeFileName(name: string): string {
         '~': '～', //https://unicode-explorer.com/c/FF5E //File System API cannot handle trailing hyphens
     };
 
+    // Maximum filename length to prevent exceeding MAX_PATH (260 chars) on Windows
+    // Reserve room for base path, website name, manga name, and file extension
+    const MAX_LENGTH = 100;
+
     // TODO: Reserved names? => CON, PRN, AUX, NUL, COM1, LPT1
-    return name
+    let sanitized = name
         .replace(/[\u0000-\u001F\u007F-\u009F]/gu, '') // https://en.wikipedia.org/wiki/C0_and_C1_control_codes
         .replace(/./g, c => lookup[c] ?? c)
         .replace(/\s+$/, '')
         .trim()
         .replace(/\.+$/, ({ length }) => '․'.repeat(length)) // Must not end with a `.` dot
-        .replace(/^\.{2,}/, ({ length }) => '․'.repeat(length)) // Must not begin with more than a single `.` dot
-        || 'untitled';
+        .replace(/^\.{2,}/, ({ length }) => '\u2024'.repeat(length)); // Must not begin with more than a single `.` dot
+
+    // Truncate if exceeds maximum length, then trim any trailing whitespace
+    if (sanitized.length > MAX_LENGTH) {
+        sanitized = sanitized.substring(0, MAX_LENGTH).trimEnd();
+    }
+
+    return sanitized || 'untitled';
 }
 
 /*
