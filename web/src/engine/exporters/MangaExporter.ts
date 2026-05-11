@@ -9,6 +9,7 @@ const mimeFileExtension = {
     'image/png': '.png',
     'image/gif': '.gif',
     'image/bmp': '.bmp',
+    'video/mp4': '.mp4',
 };
 
 export abstract class MangaExporter {
