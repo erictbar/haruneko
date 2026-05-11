@@ -1,5 +1,6 @@
-import { FetchCSS } from "../../platform/FetchProvider";
-import { type MangaScraper, type MangaPlugin, type Manga, Chapter, DecoratableMangaScraper } from '../../providers/MangaPlugin';
+import { FetchCSS, FetchWindowScript } from "../../platform/FetchProvider";
+import { type MangaScraper, type MangaPlugin, type Manga, Chapter, type Page, DecoratableMangaScraper } from '../../providers/MangaPlugin';
+import type { Priority } from '../../taskpool/DeferredTask';
 import * as Common from "../decorators/Common";
 
 export function WebsiteInfoExtractor(appendLanguage: boolean = true) {
@@ -26,12 +27,15 @@ function ExtractLanguage(text: string): string {
     return text.match(/^\/([a-z]{2,3})\//)?.at(1) ?? '';
 };
 
-export function PageExtractor(element: HTMLImageElement) {
-    return element.dataset.original || element.dataset.src || element.getAttribute('src') || '';
+export function PageExtractor(element: HTMLElement) {
+    if (element.tagName === 'SOURCE') {
+        return element.getAttribute('src') || '';
+    }
+    const img = element as HTMLImageElement;
+    return img.dataset.original || img.dataset.src || img.getAttribute('src') || '';
 }
 
-@Common.PagesSinglePageCSS('#viewer-img img', PageExtractor)
-@Common.ImageAjax(true)
+@Common.PagesSinglePageCSS('#viewer-img img, #viewer-img video source', PageExtractor)
 export class ToomicsBase extends DecoratableMangaScraper {
     protected languages: string[] = ['en'];
     protected mangaPath = '/{language}/webtoon/ranking';
@@ -75,5 +79,41 @@ export class ToomicsBase extends DecoratableMangaScraper {
             }
             return new Chapter(this, manga, new URL(id ?? anchor.pathname, this.URI).pathname, title.replace(mangaTitle, '').trim());
         });
+    }
+
+    public override async FetchImage(page: Page, priority: Priority, signal: AbortSignal): Promise<Blob> {
+        const blob = await Common.FetchImageAjax.call(this, page, priority, signal, false);
+        if (!blob.type.startsWith('video/')) {
+            return Common.GetTypedData(await blob.arrayBuffer());
+        }
+        const videoUrl = page.Link.href;
+        const script = `(async () => {
+            const response = await fetch(${JSON.stringify(videoUrl)});
+            const videoBlob = await response.blob();
+            const blobUrl = URL.createObjectURL(videoBlob);
+            try {
+                const video = document.createElement('video');
+                video.muted = true;
+                video.preload = 'auto';
+                video.src = blobUrl;
+                await new Promise((resolve, reject) => {
+                    video.addEventListener('loadedmetadata', () => { video.currentTime = 0.001; }, { once: true });
+                    video.addEventListener('seeked', resolve, { once: true });
+                    video.addEventListener('error', () => reject(new Error('video load error')), { once: true });
+                });
+                const canvas = document.createElement('canvas');
+                canvas.width = video.videoWidth || 720;
+                canvas.height = video.videoHeight || 720;
+                canvas.getContext('2d').drawImage(video, 0, 0);
+                return canvas.toDataURL('image/webp', 0.9);
+            } finally {
+                URL.revokeObjectURL(blobUrl);
+            }
+        })()`;
+        const dataURL = await FetchWindowScript<string>(new Request(this.URI), script);
+        const match = dataURL?.match(/^data:([^;]+);base64,(.+)$/s);
+        if (!match) return blob;
+        const bytes = Uint8Array.from(atob(match[2]), c => c.charCodeAt(0));
+        return new Blob([bytes], { type: match[1] });
     }
 }
