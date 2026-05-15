@@ -98,7 +98,6 @@ export default class extends DecoratableMangaScraper {
             url.searchParams.set('page', index.toString());
             return new Page(this, chapter, url, { Referer: chapterurl.href });
         });
-<<<<<<< HEAD
         return this.TestAccessAndDummyPage(pages);
     }
 
@@ -111,21 +110,6 @@ export default class extends DecoratableMangaScraper {
         // last page may be a dummy (unavailable) page. In that case strip it from page array.
         const response = await fetch(new Request(url, { method: 'HEAD', headers: { Referer: lastPage.Parameters.Referer } }));
         return response.status != 403 ? pages: pages.slice(0, -1);
-=======
-
-        //test last page
-        return await this.TestPage(pages.at(-1)) ? pages : pages.slice(0, -1);
-    }
-
-    private async TestPage(page: Page): Promise<boolean> {
-        try {
-            const url = await (await Fetch(new Request(page.Link, { headers: { Referer: page.Parameters.Referer, } }))).text();
-            await Fetch(new Request(url, { method: 'HEAD', headers: { Referer: page.Parameters.Referer } }));
-            return true;
-        } catch {
-            return false;
-        }
->>>>>>> origin/master
     }
 
     public override async FetchImage(page: Page, priority: Priority, signal: AbortSignal): Promise<Blob> {
