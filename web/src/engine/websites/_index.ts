@@ -1,7 +1,6 @@
 // Implemented Websites
 export { default as ACGN } from './ACGN';
 export { default as AdonisFansub } from './AdonisFansub';
-export { default as AduManga } from './AduManga';
 export { default as AethraScans } from './AethraScans';
 export { default as AGCScanlation } from './AGCScanlation';
 export { default as Ainzscans } from './Ainzscans';
@@ -101,6 +100,7 @@ export { default as CuuTruyen } from './CuuTruyen';
 export { default as CyComi } from './CyComi';
 export { default as DankeFursLesen } from './DankeFursLesen';
 export { default as DatgarScan } from './DatgarScan';
+export { default as Daycomics } from './Daycomics';
 export { default as Daysneo } from './Daysneo';
 export { default as DeathTollScans } from './DeathTollScans';
 export { default as DecadenceScans } from './DecadenceScans';
@@ -384,7 +384,6 @@ export { default as MangaOnlineFun } from './MangaOnlineFun';
 export { default as MangaOrigin } from './MangaOrigin';
 export { default as MangaOwlio } from './MangaOwlio';
 export { default as MangaPanda } from './MangaPanda';
-export { default as MangaPark } from './MangaPark';
 export { default as MangaParkPublisher } from './MangaParkPublisher';
 export { default as MangaPill } from './MangaPill';
 export { default as MangaplusTV } from './MangaplusTV';
@@ -683,10 +682,8 @@ export { default as Tibiu } from './Tibiu';
 export { default as ToCoronaEx } from './ToCoronaEx';
 export { default as TonariNoYoungJump } from './TonariNoYoungJump';
 export { default as TonizuToon } from './TonizuToon';
-export { default as ToomTam } from './ToomTam';
 export { default as Toomics } from './Toomics';
 export { default as ToomicsKO } from './ToomicsKO';
-export { default as ToomTam } from './ToomTam';
 export { default as Toondex } from './Toondex';
 export { default as ToonFR } from './ToonFR';
 export { default as ToonGod } from './ToonGod';
@@ -790,12 +787,6 @@ export { default as CrunchyManga } from './legacy/CrunchyManga';
 export { default as EHentai } from './legacy/EHentai';
 export { default as EpikManga } from './legacy/EpikManga';
 export { default as Futabanet } from './legacy/Futabanet';
-<<<<<<< HEAD
-=======
-export { default as LezhinEN } from './legacy/LezhinEN';
-export { default as LezhinJA } from './legacy/LezhinJA';
-export { default as LezhinKO } from './legacy/LezhinKO';
->>>>>>> origin/master
 export { default as MangaToonCN } from './legacy/MangaToonCN';
 export { default as MangaToonEN } from './legacy/MangaToonEN';
 export { default as MangaToonES } from './legacy/MangaToonES';
