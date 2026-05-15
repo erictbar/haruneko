@@ -44,7 +44,7 @@ new TestFixture({
     }
 }).AssertWebsite();
 
-//VIZ
+// CASE: VIZ
 new TestFixture({
     plugin: {
         id: 'vizshonenjump',
