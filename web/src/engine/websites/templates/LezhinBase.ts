@@ -1,7 +1,7 @@
 import type { Tag } from '../../Tags';
 import icon from '../Lezhin.webp';
-import { Fetch, FetchJSON, FetchNextJS, FetchWindowScript } from '../../platform/FetchProvider';
-import { type Chapter, DecoratableMangaScraper, Manga, Page, type MangaPlugin } from '../../providers/MangaPlugin';
+import { FetchJSON, FetchNextJS, FetchWindowScript } from '../../platform/FetchProvider';
+import { Chapter, DecoratableMangaScraper, Manga, Page, type MangaPlugin } from '../../providers/MangaPlugin';
 import { EngineResourceKey as E, WebsiteResourceKey as W } from '../../../i18n/ILocale';
 import type { Priority } from '../../taskpool/TaskPool';
 import * as Common from '../decorators/Common';
@@ -12,13 +12,6 @@ import { GetBytesFromURLBase64 } from '../../BufferEncoder';
 
 // TODO : Handle Password and login change in plugin config
 // TODO : Update CDN & force language after login attempt
-
-function ChapterExtractor(anchor: HTMLAnchorElement) {
-    return {
-        id: anchor.pathname,
-        title: anchor.querySelector('h3.lzTypography').textContent.trim()
-    };
-}
 
 function LoginScript(username: string, password: string,): string {
     return `
@@ -70,6 +63,15 @@ type APIKeyPair = {
     }
 };
 
+type HydratedChapters = {
+    episodes: {
+        name: string;
+        display: {
+            title: string;
+        };
+    }[];
+};
+
 type EpisodeParameters = {
     episodeID: number;
     comicID: number;
@@ -79,33 +81,41 @@ type EpisodeParameters = {
     subscribed: boolean;
 };
 
-type APIEpisode = {
-    data: {
-        episode: {
-            isCollected: boolean;
-        }
-    }
+type Queries = {
+    queries: {
+        queryKey: string[];
+        state: {
+            data: JSONElement;
+        };
+    }[];
 };
 
-type APIPages = {
-    data: {
-        id: string;
-        extra: {
-            subscribed: boolean;
-            comic: {
-                metadata?: {
-                    imageShuffle: boolean;
-                }
-            }
-            episode: {
-                scrollsInfo?: Array<{ path: string }>;
-                pagesInfo?: Array<{ path: string }>;
-                updatedAt: number;
-                id: number;
-                idComic: number;
-            }
-        }
-    }
+type QuerySubStatus = {
+    isPurchased: boolean;
+    isSubscribed: boolean;
+};
+
+type QueryPages = {
+    comic: {
+        id: number;
+    };
+    episode: {
+        id: number;
+        updatedAt: number;
+    };
+    media: {
+        imageShuffle: boolean;
+        scrollView: {
+            path: string;
+            shuffleKey: string;
+            cutType: string;
+        }[];
+        pageView: {
+            path: string;
+            shuffleKey: string;
+            cutType: string;
+        }[];
+    };
 };
 
 type TPiece = {
@@ -138,7 +148,6 @@ type LoginResult = {
     appConfig: AuthData;
 };
 
-@Common.ChaptersSinglePageCSS('div#episode-list div[data-id] a ', undefined, ChapterExtractor)
 export class LezhinBase extends DecoratableMangaScraper {
     private locale: string;
     private readonly apiUrl = 'https://www.lezhinus.com/lz-api/v2/';
@@ -190,36 +199,20 @@ export class LezhinBase extends DecoratableMangaScraper {
     }
 
     public override async FetchManga(provider: MangaPlugin, url: string): Promise<Manga> {
-        // If a chapter URL was provided, resolve title from the manga page but keep
-        // the original identifier (to carry the target episode into FetchChapters)
         const uri = new URL(url);
-        
-        // Check for new library format: /en/library/comic/en-US/alias/episode
-        const libraryChapterPattern = new RegExpSafe(`^/${this.languagePath}/library/comic/${this.locale}/([^/]+)/([^/]+)$`);
-        const libMatch = uri.pathname.match(libraryChapterPattern);
-        
-        // Check for old format: /en/comic/alias/episodeId
+        const chapterPattern = new RegExpSafe(`^/${this.languagePath}/library/comic/${this.locale}/([^/]+)/([^/]+)$`);
+        const chapterMatch = uri.pathname.match(chapterPattern);
         const oldChapterPattern = new RegExpSafe(`^/${this.languagePath}/comic/([^/]+)/([^/]+)$`);
-        const oldMatch = uri.pathname.match(oldChapterPattern);
+        const oldChapterMatch = uri.pathname.match(oldChapterPattern);
 
-        if (libMatch) {
-            const alias = libMatch[1];
+        if (chapterMatch || oldChapterMatch) {
+            const alias = (chapterMatch ?? oldChapterMatch)[1];
             const mangaPage = new URL(`/${this.languagePath}/comic/${alias}`, this.URI).href;
-            const { Title } = await Common.FetchMangaCSS.call(this, provider, mangaPage, 'h2[class*="episodeListDetail__title__"]');
-            // Keep original pathname (and search) as identifier to signal single-chapter intent
-            return new Manga(this, provider, uri.pathname + uri.search, Title);
-        }
-        
-        if (oldMatch) {
-            const alias = oldMatch[1];
-            const episodeId = oldMatch[2];
-            const mangaPage = new URL(`/${this.languagePath}/comic/${alias}`, this.URI).href;
-            const { Title } = await Common.FetchMangaCSS.call(this, provider, mangaPage, 'h2[class*="episodeListDetail__title__"]');
-            // Keep original pathname (and search) as identifier to signal single-chapter intent
+            const { Title } = await Common.FetchMangaCSS.call(this, provider, mangaPage, 'div.lzSection p[class*="-Head3xl"]');
             return new Manga(this, provider, uri.pathname + uri.search, Title);
         }
 
-        return Common.FetchMangaCSS.call(this, provider, url, 'h2[class*="episodeListDetail__title__"]');
+        return Common.FetchMangaCSS.call(this, provider, url, 'div.lzSection p[class*="-Head3xl"]');
     }
 
     public override async FetchMangas(provider: MangaPlugin): Promise<Manga[]> {
@@ -241,88 +234,23 @@ export class LezhinBase extends DecoratableMangaScraper {
     }
 
     public override async FetchChapters(manga: Manga): Promise<Chapter[]> {
-        // Support direct chapter URLs: /{lang}/library/comic/{locale}/{alias}/{episode}
-        const libraryChapterPattern = new RegExpSafe(`^/${this.languagePath}/library/comic/${this.locale}/([^/]+)/([^/]+)$`);
-        const libMatch = manga.Identifier.match(libraryChapterPattern);
-
-        if (libMatch) {
-            const alias = libMatch[1];
-            const episodeName = libMatch[2];
-            // Create a synthetic single-chapter list for this episode
-            const id = `/${this.languagePath}/library/comic/${this.locale}/${alias}/${episodeName}`;
-            const title = episodeName;
-            return [ new Chapter(this, manga, id, title) ];
+        const pathname = new URL(manga.Identifier, this.URI).pathname;
+        const chapterPattern = new RegExpSafe(`^/${this.languagePath}/library/comic/${this.locale}/([^/]+)/([^/]+)$`);
+        const chapterMatch = pathname.match(chapterPattern);
+        if (chapterMatch) {
+            const [ , alias, episodeName ] = chapterMatch;
+            return [ new Chapter(this, manga, `/${this.languagePath}/library/comic/${this.locale}/${alias}/${episodeName}`, episodeName) ];
         }
 
-        // Support old-style direct chapter URLs: /{lang}/comic/{alias}/{episodeId}
         const oldChapterPattern = new RegExpSafe(`^/${this.languagePath}/comic/([^/]+)/([^/]+)$`);
-        const oldMatch = manga.Identifier.match(oldChapterPattern);
-
-        if (oldMatch) {
-            const alias = oldMatch[1];
-            const episodeId = oldMatch[2];
-            // Create a synthetic single-chapter list for this episode
-            const id = `/${this.languagePath}/comic/${alias}/${episodeId}`;
-            const title = `Episode ${episodeId}`;
-            return [ new Chapter(this, manga, id, title) ];
+        const oldChapterMatch = pathname.match(oldChapterPattern);
+        if (oldChapterMatch) {
+            const [ , alias, episodeName ] = oldChapterMatch;
+            return [ new Chapter(this, manga, `/${this.languagePath}/comic/${alias}/${episodeName}`, `Episode ${episodeName}`) ];
         }
 
-        // No episodes API exists - must scrape from DOM (virtualized list shows ~15 visible)
-        const comicAlias = manga.Identifier.split('/').pop();
-        const request = new Request(new URL(manga.Identifier, this.URI));
-
-        const script = `
-            new Promise(async (resolve, reject) => {
-                try {
-                    // Wait for initial render
-                    await new Promise(r => setTimeout(r, 2000));
-
-                    // Extract all visible episode links
-                    const allLinks = document.querySelectorAll('a[href*="/comic/${comicAlias}/"]');
-                    const episodeMap = new Map();
-
-                    allLinks.forEach(link => {
-                        const href = link.getAttribute('href');
-                        if (!href) return;
-
-                        const episodeName = href.split('/').pop();
-                        if (episodeName && !episodeMap.has(episodeName)) {
-                            let title = episodeName;
-
-                            // Try to extract title from link
-                            const titleElem = link.querySelector('[class*="displayName"], [class*="title"], span, div');
-                            if (titleElem?.textContent?.trim()) {
-                                const text = titleElem.textContent.trim();
-                                if (text.length > 1) {
-                                    title = text;
-                                }
-                            }
-
-                            episodeMap.set(episodeName, title);
-                        }
-                    });
-
-                    const episodes = Array.from(episodeMap.entries()).map(([name, title]) => ({
-                        name,
-                        title
-                    }));
-
-                    resolve(episodes);
-                } catch (error) {
-                    reject(error);
-                }
-            });
-        `;
-
-        try {
-            const episodes = await FetchWindowScript<Array<{ name: string, title: string }>>(request, script, 10000);
-            return episodes.map(ep => {
-                const id = `/${this.languagePath}/comic/${comicAlias}/${ep.name}`;
-                return new Chapter(this, manga, id, ep.title);
-            });
-        } catch (error) {
-            throw new Exception(W.Plugin_Common_Chapter_UnavailableError);
-        }
+        const { episodes } = await FetchNextJS<HydratedChapters>(new Request(new URL(manga.Identifier, this.URI)), data => 'episodes' in data);
+        return episodes.map(({ name, display: { title } }) => new Chapter(this, manga, `${manga.Identifier}/${name}`, title));
     }
 
     public async FetchPages(chapter: Chapter): Promise<Page<EpisodeParameters>[]> {
@@ -337,25 +265,24 @@ export class LezhinBase extends DecoratableMangaScraper {
             subscribed: false
         };
 
-        //if we are logged check if purchased
-        if (this.tokenProvider.IsLogged) {
-            const uri = new URL(`https://www.lezhinus.com/lz-api/contents/v3/${chapter.Parent.Identifier.split('/').at(-1)}/episodes/${chapter.Identifier.split('/').at(-1)}?referrerViewType=NORMAL&objectType=comic`);
-            const { data: { episode: { isCollected } } } = await this.FetchAPI<APIEpisode>(uri, {
-                'X-LZ-Adult': '2',
-                Referer: new URL(chapter.Identifier, this.URI).href
-            });
-            parameters.purchased = !!isCollected;
-        }
+        const queriesObject = await FetchNextJS<Queries>(new Request(new URL(chapter.Identifier, this.URI)), data => 'queries' in data);
+        if (!queriesObject) throw new Exception(W.Plugin_Common_Chapter_UnavailableError);
 
-        const uri = new URL(`./inventory_groups/comic_viewer?platform=web&store=web&preload=false&type=comic_episode&alias=${chapter.Parent.Identifier.split('/').pop()}&name=${chapter.Identifier.split('/').pop()}`, this.apiUrl);
-        const { data: { extra: { comic, episode: { id, idComic, updatedAt, scrollsInfo, pagesInfo }, subscribed } } } = await this.FetchAPI<APIPages>(uri);
+        const pagesQuery = queriesObject.queries.find(query => query.queryKey[0] === 'viewer-static-state').state.data as QueryPages;
+        const subStatusQuery = queriesObject.queries.find(query => query.queryKey[0] === 'viewer-user-state').state.data as QuerySubStatus;
 
-        parameters.episodeID = id;
-        parameters.comicID = idComic;
+        const { episode: { id: episodeID, updatedAt }, comic: { id: comicID }, media: { imageShuffle, scrollView, pageView } } = pagesQuery;
+        const { isPurchased, isSubscribed } = subStatusQuery;
+
+        parameters.episodeID = episodeID;
+        parameters.comicID = comicID;
         parameters.updatedAt = updatedAt;
-        parameters.shuffled = !!comic.metadata?.imageShuffle;
-        parameters.subscribed = subscribed;
-        return (pagesInfo ?? scrollsInfo).map(({ path }) => new Page<EpisodeParameters>(this, chapter, new URL(`/v2${path}${this.Settings.imageFormat.Value}`, this.cdnURI), parameters));
+        parameters.shuffled = !!imageShuffle;
+        parameters.subscribed = isSubscribed;
+        parameters.purchased = isPurchased;
+        return (pageView ?? scrollView)
+            .filter(({ cutType }) => cutType === 'contents')
+            .map(({ path }) => new Page<EpisodeParameters>(this, chapter, new URL(`/v2${path}${this.Settings.imageFormat.Value}`, this.cdnURI), parameters));
     }
 
     public override async FetchImage(page: Page<EpisodeParameters>, priority: Priority, signal: AbortSignal): Promise<Blob> {
@@ -368,6 +295,7 @@ export class LezhinBase extends DecoratableMangaScraper {
         } catch {
             throw new Exception(W.Plugin_Common_Chapter_UnavailableError);
         }
+
         //update image url
         page.Link.search = new URLSearchParams({
             purchased: `${purchased}`,
@@ -401,19 +329,21 @@ export class LezhinBase extends DecoratableMangaScraper {
 
     private async ForceLanguage(): Promise<void> {
         if (!this.tokenProvider.IsLogged) return;
-        await Fetch(new Request(new URL(`./api/my-preference?userId=${this.tokenProvider.UserId}&lng=${this.languagePath}`, this.URI)));
+        await this.FetchAPI(new URL('./api/locale', this.URI), undefined, { locale_region: this.locale });
     }
 
-    private async FetchAPI<T extends JSONElement>(url: URL, additionalHeaders: HeadersInit = {}): Promise<T> {
-        const request = new Request(url, {
+    private async FetchAPI<T extends JSONElement>(url: URL, additionalHeaders: HeadersInit = {}, body: JSONElement = undefined): Promise<T> {
+        return FetchJSON<T>(new Request(url, {
+            method: body ? 'POST' : 'GET',
             headers: await this.tokenProvider.ApplyAuthorizationHeader({
+                'Content-type': 'application/json',
                 Origin: this.URI.origin,
                 Referer: this.URI.href,
                 'x-lz-locale': this.locale,
                 ...additionalHeaders
-            })
-        });
-        return FetchJSON<T>(request);
+            }),
+            body: body ? JSON.stringify(body) : undefined
+        }));
     }
 
 }
