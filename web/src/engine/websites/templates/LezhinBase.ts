@@ -118,6 +118,17 @@ type QueryPages = {
     };
 };
 
+type MediaCut = {
+    path: string;
+    shuffleKey: string;
+    cutType: string;
+};
+
+export function GetContentCuts(pageView: MediaCut[] = [], scrollView: MediaCut[] = []): MediaCut[] {
+    const cuts = pageView.length > 0 ? pageView : scrollView;
+    return cuts.filter(({ cutType }) => cutType === 'contents');
+}
+
 type TPiece = {
     height: number;
     left: number;
@@ -207,9 +218,13 @@ export class LezhinBase extends DecoratableMangaScraper {
 
         if (chapterMatch || oldChapterMatch) {
             const alias = (chapterMatch ?? oldChapterMatch)[1];
+            const episodeName = oldChapterMatch?.[2];
             const mangaPage = new URL(`/${this.languagePath}/comic/${alias}`, this.URI).href;
             const { Title } = await Common.FetchMangaCSS.call(this, provider, mangaPage, 'div.lzSection p[class*="-Head3xl"]');
-            return new Manga(this, provider, uri.pathname + uri.search, Title);
+            const identifier = oldChapterMatch
+                ? `/${this.languagePath}/library/comic/${this.locale}/${alias}/${episodeName}`
+                : uri.pathname + uri.search;
+            return new Manga(this, provider, identifier, Title);
         }
 
         return Common.FetchMangaCSS.call(this, provider, url, 'div.lzSection p[class*="-Head3xl"]');
@@ -246,7 +261,7 @@ export class LezhinBase extends DecoratableMangaScraper {
         const oldChapterMatch = pathname.match(oldChapterPattern);
         if (oldChapterMatch) {
             const [ , alias, episodeName ] = oldChapterMatch;
-            return [ new Chapter(this, manga, `/${this.languagePath}/comic/${alias}/${episodeName}`, `Episode ${episodeName}`) ];
+            return [ new Chapter(this, manga, `/${this.languagePath}/library/comic/${this.locale}/${alias}/${episodeName}`, `Episode ${episodeName}`) ];
         }
 
         const { episodes } = await FetchNextJS<HydratedChapters>(new Request(new URL(manga.Identifier, this.URI)), data => 'episodes' in data);
@@ -280,8 +295,7 @@ export class LezhinBase extends DecoratableMangaScraper {
         parameters.shuffled = !!imageShuffle;
         parameters.subscribed = isSubscribed;
         parameters.purchased = isPurchased;
-        return (pageView ?? scrollView)
-            .filter(({ cutType }) => cutType === 'contents')
+        return GetContentCuts(pageView, scrollView)
             .map(({ path }) => new Page<EpisodeParameters>(this, chapter, new URL(`/v2${path}${this.Settings.imageFormat.Value}`, this.cdnURI), parameters));
     }
 
