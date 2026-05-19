@@ -47,7 +47,9 @@ export class DownloadTask {
      * @throws {@link RangeError} if the media entries are empty
      */
     private AssertMediaEntries() {
-        new Array(this.Media.Entries.Value.length - 1);
+        if (this.Media.Entries.Value.length === 0) {
+            throw new RangeError('Media has no entries to download');
+        }
     }
 
     public async Run(/* Target Directory / Archive ? */): Promise<void> {

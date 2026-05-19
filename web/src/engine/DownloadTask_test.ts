@@ -139,6 +139,19 @@ describe('DownloadTask', () => {
             expect(fixture.StorageControllerMock.SaveTemporary).toBeCalledTimes(1);
             expect(fixture.StorageControllerMock.RemoveTemporary).toBeCalledTimes(1);
         });
+
+        it('Should report empty media entries with explicit error', async () => {
+            const fixture = new TestFixture().SetupMediaContainer([]);
+            const testee = fixture.CreateTestee();
+
+            await testee.Run();
+
+            expect(fixture.MediaContainerMock.Update).toBeCalledTimes(1);
+            expect(testee.Errors.Value).toHaveLength(1);
+            expect(testee.Errors.Value[0]).toBeInstanceOf(RangeError);
+            expect(testee.Errors.Value[0].message).toBe('Media has no entries to download');
+            expect(fixture.MediaContainerMock.Store).not.toBeCalled();
+        });
     });
 
     describe('Abort', () => {

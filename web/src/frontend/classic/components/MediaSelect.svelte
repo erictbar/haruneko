@@ -38,6 +38,7 @@
     import type { MediaInfoTracker } from '../../../engine/trackers/IMediaInfoTracker';
     import { Exception } from '../../../engine/Error';
     import { FrontendResourceKey as R } from '../../../i18n/ILocale';
+    import { TryGetMediaFromClipboardURL } from '../../ClipboardMedia';
     import { resizeBar } from '../lib/actions';
     import type { MediaContainer2 } from '../Types';
 
@@ -167,22 +168,20 @@
     async function onMediaPasteURL(_event: Event) {
         try {
             const link = new URL(await navigator.clipboard.readText()).href;
-            for (const website of HakuNeko.PluginController.WebsitePlugins) {
-                const media = await website.TryGetEntry(link);
-                if (media) {
-                    $selectedItem = undefined;
-                    mediaNameFilter = '';
-                    if (!$selectedPlugin?.IsSameAs(media.Parent)) {
-                        disablePluginRefresh = true;
-                        $selectedPlugin = media.Parent;
-                    }
-                    if (!$selectedMedia?.IsSameAs(media)) {
-                        $selectedMedia = media;
-                        medias = [media];
-                        loadPlugin = Promise.resolve(media.Parent);
-                    }
-                    return;
+            const media = await TryGetMediaFromClipboardURL(link);
+            if (media) {
+                $selectedItem = undefined;
+                mediaNameFilter = '';
+                if (!$selectedPlugin?.IsSameAs(media.Parent)) {
+                    disablePluginRefresh = true;
+                    $selectedPlugin = media.Parent;
                 }
+                if (!$selectedMedia?.IsSameAs(media)) {
+                    $selectedMedia = media;
+                    medias = [media];
+                    loadPlugin = Promise.resolve(media.Parent);
+                }
+                return;
             }
             throw new Exception(R.Frontend_Media_PasteLink_NotFoundError, link);
         } catch (error) {

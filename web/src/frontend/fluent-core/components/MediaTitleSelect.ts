@@ -3,6 +3,7 @@ import type { MediaContainer, MediaChild } from '../../../engine/providers/Media
 import type { BookmarkPlugin } from '../../../engine/providers/BookmarkPlugin';
 import type { Bookmark } from '../../../engine/providers/Bookmark';
 import { Exception } from '../../../engine/Error';
+import { TryGetMediaFromClipboardURL } from '../../ClipboardMedia';
 import { LocalizationProviderRegistration, type ILocalizationProvider } from '../services/LocalizationProvider';
 import { FrontendResourceKey as R } from '../../../i18n/ILocale';
 import type { SearchBox } from './SearchBox';
@@ -287,16 +288,14 @@ export class MediaTitleSelect extends FASTElement {
     private PastedClipboardUrlChanged = async function (this: MediaTitleSelect, uri: URL) {
         try {
             this.pasting = true;
-            for (const website of HakuNeko.PluginController.WebsitePlugins) {
-                let media = await website.TryGetEntry(uri.href);
-                if (media) {
-                    media = HakuNeko.BookmarkPlugin.Entries.Value.find(entry => entry.IsSameAs(media)) ?? media;
-                    await media.Update();
-                    if (!this.Selected || !this.Selected.IsSameAs(media)) {
-                        this.Selected = media;
-                    }
-                    return;
+            let media = await TryGetMediaFromClipboardURL(uri.href);
+            if (media) {
+                media = HakuNeko.BookmarkPlugin.Entries.Value.find(entry => entry.IsSameAs(media)) ?? media;
+                await media.Update();
+                if (!this.Selected || !this.Selected.IsSameAs(media)) {
+                    this.Selected = media;
                 }
+                return;
             }
             throw new Exception(R.Frontend_Media_PasteLink_NotFoundError, uri.href);
         } catch (error) {
