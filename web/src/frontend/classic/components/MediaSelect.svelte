@@ -13,7 +13,6 @@
     import CopyLink from 'carbon-icons-svelte/lib/CopyLink.svelte';
     import type {
         ComboBoxItem,
-        ComboBoxItemId,
     } from 'carbon-components-svelte/src/ComboBox/ComboBox.svelte';
     // Third Party
     import Fuse from 'fuse.js';
@@ -24,12 +23,8 @@
     import Tracker from './Tracker.svelte';
     import VirtualList from '../lib/VirtualList.svelte';
     // UI : Stores
-    import {
-        selectedPlugin,
-        selectedMedia,
-        selectedItem,
-    } from '../stores/Stores';
-    import { FuzzySearch } from '../stores/Settings';
+    import {Store as UI } from '../stores/Stores.svelte';
+    import { Settings } from '../stores/Settings.svelte';
     // Hakuneko Engine
     import type {
         MediaContainer,
@@ -38,7 +33,6 @@
     import type { MediaInfoTracker } from '../../../engine/trackers/IMediaInfoTracker';
     import { Exception } from '../../../engine/Error';
     import { FrontendResourceKey as R } from '../../../i18n/ILocale';
-    import { TryGetMediaFromClipboardURL } from '../../ClipboardMedia';
     import { resizeBar } from '../lib/actions';
     import type { MediaContainer2 } from '../Types';
 
@@ -90,23 +84,23 @@
     let filteredmedias: MediaContainer<MediaChild>[] = $state([]);
     $effect(() => {
         medias;
-        filteredmedias = filterMedia(mediaNameFilter).sort((a, b) => 
+        filteredmedias = filterMedia(mediaNameFilter).sort((a, b) =>
             a.Title.localeCompare(b.Title)
         );
     });
     let fuse = new Fuse([]);
 
-    loadPlugin = loadMedias($selectedPlugin);
-
-    selectedPlugin.subscribe((newplugin) => {
+    loadPlugin = loadMedias(UI.selectedPlugin);
+    $effect(() => {
         const previousPlugin = currentPlugin;
-        loadPlugin = Promise.resolve(newplugin);
-        currentPlugin = newplugin;
+        loadPlugin = Promise.resolve(UI.selectedPlugin);
+        currentPlugin = UI.selectedPlugin;
         pluginDropdownSelected = currentPlugin?.Identifier;
         if (!disablePluginRefresh && !currentPlugin?.IsSameAs(previousPlugin))
-            loadMedias(newplugin);
+            loadMedias(UI.selectedPlugin);
         disablePluginRefresh = false;
     });
+
 
     async function loadMedias(
         plugin: MediaContainer<MediaChild>,
@@ -124,7 +118,7 @@
         medias = loadedmedias;
         return plugin;
     }
-    
+
     /**
     * Filters the media items by title or plugin's name
     * @param {string} mediaNameFilter - The filter string to match
@@ -134,7 +128,7 @@
         if (mediaNameFilter === '') return medias;
         const mediasInPlugin: MediaContainer<MediaChild>[] = medias.filter((item) => item.Parent.Title.toLowerCase().includes(mediaNameFilter.toLowerCase()));
         let filteredMedia: MediaContainer<MediaChild>[] = [];
-        if ($FuzzySearch)
+        if (Settings.FuzzySearch.Value)
             filteredMedia = fuse.search(mediaNameFilter).map((item) => item.item);
         else
             filteredMedia = medias.filter((item) =>
@@ -154,34 +148,36 @@
 
     async function onUpdateMediaEntriesClick() {
         filteredmedias = []
-        $selectedMedia = undefined;
-        $selectedItem = undefined;
-        loadPlugin = updatePlugin($selectedPlugin);
+        UI.selectedMedia = undefined;
+        UI.selectedItem= undefined;
+        loadPlugin = updatePlugin(UI.selectedPlugin);
     }
 
     async function updatePlugin(plugin: MediaContainer<MediaChild>): Promise<MediaContainer<MediaChild>> {
         await plugin.Update();
-        return loadMedias($selectedPlugin);
+        return loadMedias(UI.selectedPlugin);
     }
 
     document.addEventListener('media-paste-url', onMediaPasteURL);
     async function onMediaPasteURL(_event: Event) {
         try {
             const link = new URL(await navigator.clipboard.readText()).href;
-            const media = await TryGetMediaFromClipboardURL(link);
-            if (media) {
-                $selectedItem = undefined;
-                mediaNameFilter = '';
-                if (!$selectedPlugin?.IsSameAs(media.Parent)) {
-                    disablePluginRefresh = true;
-                    $selectedPlugin = media.Parent;
+            for (const website of HakuNeko.PluginController.WebsitePlugins) {
+                const media = await website.TryGetEntry(link);
+                if (media) {
+                    UI.selectedItem= undefined;
+                    mediaNameFilter = '';
+                    if (!UI.selectedPlugin?.IsSameAs(media.Parent)) {
+                        disablePluginRefresh = true;
+                        UI.selectedPlugin = media.Parent;
+                    }
+                    if (!UI.selectedMedia?.IsSameAs(media)) {
+                        UI.selectedMedia = media;
+                        medias = [media];
+                        loadPlugin = Promise.resolve(media.Parent);
+                    }
+                    return;
                 }
-                if (!$selectedMedia?.IsSameAs(media)) {
-                    $selectedMedia = media;
-                    medias = [media];
-                    loadPlugin = Promise.resolve(media.Parent);
-                }
-                return;
             }
             throw new Exception(R.Frontend_Media_PasteLink_NotFoundError, link);
         } catch (error) {
@@ -189,8 +185,8 @@
         }
     }
 
-    async function selectPlugin(id: ComboBoxItemId) {
-        $selectedPlugin = [HakuNeko.BookmarkPlugin, ...orderedPlugins].find(
+    async function selectPlugin(id: string) {
+        UI.selectedPlugin = [HakuNeko.BookmarkPlugin, ...orderedPlugins].find(
             (plugin) => plugin.Identifier === id,
         );
     }
@@ -203,7 +199,7 @@
     <div>
         <Tracker
             {isTrackerModalOpen}
-            media={$selectedMedia}
+            media={UI.selectedMedia}
             tracker={selectedTracker}
             on:close={() => (isTrackerModalOpen = false)}
         />
@@ -213,6 +209,7 @@
     <div id="MediaTitle">
         <h5>Media List</h5>
         <Button
+            role="paste"
             icon={CopyLink}
             size="small"
             kind="ghost"
@@ -227,7 +224,7 @@
             id="PluginSelect"
             placeholder="Select a Plugin"
             bind:selectedId={pluginDropdownSelected}
-            on:clear={async() => ($selectedPlugin = undefined)}
+            on:clear={async() => (UI.selectedPlugin = undefined)}
             on:select={async(event) => selectPlugin(event.detail.selectedId)}
             size="sm"
             clearFilterOnOpen
@@ -245,7 +242,7 @@
                 <div class="dropdown title" class:favorite={plugin.isFavorite}>{plugin.value.Title}</div>
                 <div>{plugin.value.URI}</div>
             {/if}
-        </ComboBox> 
+        </ComboBox>
         <Button
             id="MediaUpdateButton"
             icon={UpdateNow}
@@ -279,9 +276,9 @@
         <VirtualList items={filteredmedias as MediaContainer2[]} itemHeight={24} container={medialistref} containerHeight={medialistrefHeight}>
             {#snippet children(item)}
                 <div class="media">
-                        <Media 
+                        <Media
                         media={item}
-                        /> 
+                        />
                 </div>
             {/snippet}
         </VirtualList>
@@ -289,13 +286,13 @@
     <div id="MediaCount">
         Medias : {filteredmedias.length}/{medias.length}
     </div>
-    <div 
+    <div
         role="separator"
         aria-orientation="vertical"
         class="resize"
         use:resizeBar={{orientation:'vertical'}}
     > </div>
-    
+
 </div>
 
 <style>
@@ -385,6 +382,6 @@
         cursor: col-resize;
     }
     .resize:hover {
-            background-color:var(--cds-ui-02); 
+            background-color:var(--cds-ui-02);
     }
 </style>
