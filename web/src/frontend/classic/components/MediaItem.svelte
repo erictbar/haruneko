@@ -189,7 +189,7 @@
             tooltipAlignment="end"
             icon={EventIncident}
             iconDescription="Error: click to retry (detailed error in download tasks)"
-            onclick={() => downloadTask.Run()}
+            onclick={() => downloadTask?.Run()}
         />
     {:else if downloadTaskStatus === Status.Completed}
         <Button
