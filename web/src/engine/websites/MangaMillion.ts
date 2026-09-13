@@ -7,6 +7,8 @@ import { FetchProto, FetchWindowScript } from '../platform/FetchProvider';
 import type { Priority } from '../taskpool/DeferredTask';
 import { GetBytesFromHex } from '../BufferEncoder';
 import { DecryptAES } from '../Crypto';
+import { Exception } from '../Error';
+import { WebsiteResourceKey as R } from '../../i18n/ILocale';
 
 type MangaMillionResponse = {
     mangaList: MangaListViewResponse;
@@ -221,24 +223,14 @@ export default class extends DecoratableMangaScraper {
 
     public override async FetchChapters(manga: Manga): Promise<Chapter[]> {
         const { titleLanguageSelect: { languages } } = await this.FetchAPI(`./title_language_select?service_language=en&avif_enable=false&original_title_id=${manga.Identifier}`);
-<<<<<<< HEAD
-        const chapterPromises = languages.map(async (language) => {
-            const { chapterList: { chapterGroups } } = await this.FetchAPI(`./chapter_list?service_language=en&avif_enable=true&original_title_id=${manga.Identifier}&translated_language=${language.code}`);
-=======
         const chapterPromises = languages.map(async ({ code }) => {
             const { chapterList: { chapterGroups } } = await this.FetchAPI(`./chapter_list?service_language=en&avif_enable=true&original_title_id=${manga.Identifier}&translated_language=${code}`);
->>>>>>> upstream/master
             return chapterGroups.flatMap(({ chapters }) => {
                 return chapters
                     .filter(({ translatedChapterId }) => translatedChapterId)
                     .map(({ translatedChapterId, name, number }) =>
-<<<<<<< HEAD
-                        new Chapter(this, manga, `${translatedChapterId}`, [number, name, `[${language.code}]`].joinTitleSegments(),
-                            ...[chapterLanguageMap.get(language.code)].filter(Boolean))
-=======
                         new Chapter(this, manga, `${translatedChapterId}`, [number, name, `[${code}]`].joinTitleSegments(),
                             ...[chapterLanguageMap.get(code)].filter(Boolean))
->>>>>>> upstream/master
                     );
             });
         });
@@ -248,7 +240,11 @@ export default class extends DecoratableMangaScraper {
     }
 
     public override async FetchPages(chapter: Chapter): Promise<Page<PageData>[]> {
-        const { viewer: { pages, aesIv, aesKey } } = await this.FetchAPI(`./viewer?service_language=en&avif_enable=false&translated_chapter_id=${chapter.Identifier}&quality=high`);
+        const response = await this.FetchAPI(`./viewer?service_language=en&avif_enable=false&translated_chapter_id=${chapter.Identifier}&quality=high`);
+        if (!response.viewer?.pages) {
+            throw new Exception(R.Plugin_Common_Chapter_UnavailableError);
+        }
+        const { pages, aesIv, aesKey } = response.viewer;
         return pages.map(({ imageUrl }) => new Page(this, chapter, new URL(imageUrl), { aesIv, aesKey, Referer: this.URI.href }));
     }
 
@@ -259,13 +255,7 @@ export default class extends DecoratableMangaScraper {
     }
 
     private async DecryptImage(blob: Blob, keyData: string, iv: string): Promise<Blob> {
-<<<<<<< HEAD
-        const algorithm = { name: 'AES-CBC', iv: GetBytesFromHex(iv) };
-        const key = await crypto.subtle.importKey('raw', GetBytesFromHex(keyData), algorithm, false, ['decrypt']);
-        const decrypted = await crypto.subtle.decrypt(algorithm, key, await blob.arrayBuffer());
-=======
         const decrypted = await DecryptAES(await blob.arrayBuffer(), GetBytesFromHex(keyData), { name: 'AES-CBC', iv: GetBytesFromHex(iv) });
->>>>>>> upstream/master
         return Common.GetTypedData(decrypted);
     }
 
