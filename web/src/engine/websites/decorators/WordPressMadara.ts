@@ -35,13 +35,6 @@ const queryPageListLinks = 'div.page-break img';
 export const DefaultInfoExtractor = Common.AnchorInfoExtractor(false, queryChapterListBloat);
 
 export const WPMangaProtectorPagesExtractorScript = `
-    new Promise((resolve, reject) => {
-        const decrypted = JSON.parse(CryptoJS.AES.decrypt(chapter_data, wpmangaprotectornonce, {
-            format: CryptoJSAesJson
-        }).toString(CryptoJS.enc.Utf8));
-        resolve(JSON.parse(decrypted));
-    });
-
     /*
     const CryptoJSAesJson = {
         stringify: function(_0x391932) {
@@ -63,6 +56,13 @@ export const WPMangaProtectorPagesExtractorScript = `
         }
     };
     */
+
+    (() => {
+        const decrypted = JSON.parse(CryptoJS.AES.decrypt(chapter_data, wpmangaprotectornonce, {
+            format: CryptoJSAesJson
+        }).toString(CryptoJS.enc.Utf8));
+        return JSON.parse(decrypted);
+    })();
 `;
 
 /***************************************************
@@ -362,7 +362,7 @@ async function FetchChaptersMultiPageAJAX(this: MangaScraper, manga: Manga, quer
             }
         });
         const chapters: Chapter[] = await FetchChaptersCSS.call(this, manga, request, query, extract);
-        chapters.length > 0 && chapterList.isMissingLastItemFrom(chapters) ? chapterList.push(...chapters) : run = false;
+        chapters.length > 0 && chapterList.isLastItemDifferentFromNonEmpty(chapters) ? chapterList.push(...chapters) : run = false;
         await Delay(throttle);
     }
     return chapterList;

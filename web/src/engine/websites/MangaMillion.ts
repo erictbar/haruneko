@@ -236,11 +236,11 @@ export default class extends DecoratableMangaScraper {
         });
 
         const nestedChapters = await Promise.all(chapterPromises);
-        return nestedChapters.flat();
+        return nestedChapters.flat().reverse();
     }
 
     public override async FetchPages(chapter: Chapter): Promise<Page<PageData>[]> {
-        const response = await this.FetchAPI(`./viewer?service_language=en&avif_enable=false&translated_chapter_id=${chapter.Identifier}&quality=high`);
+        const response = await this.FetchAPI(`./viewer?service_language=en&avif_enable=false&translated_chapter_id=${chapter.Identifier}&quality=middle`);
         if (!response.viewer?.pages) {
             throw new Exception(R.Plugin_Common_Chapter_UnavailableError);
         }

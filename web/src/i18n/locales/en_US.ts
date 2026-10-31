@@ -1,5 +1,5 @@
 import type { VariantResource } from '../ILocale';
-// HACK: Import a reference to the en-US tranlsation itself, so the auto-generated translation files are based on the en-US translation
+// HACK: Import a reference to the en-US translation itself, so the auto-generated translation files are based on the en-US translation
 import enUS from './en_US';
 
 /**
@@ -29,9 +29,6 @@ const translations: VariantResource = {
   // [SECTION]: Frontend (Common/Shared)
   Frontend_Product_Title: 'HakuNeko',
   Frontend_Product_Description: 'Manga, Anime and Novel Downloader',
-  Frontend_Product_Description_Short: 'is a cross-platform downloader for manga and anime from various websites.',
-  Frontend_Product_Description_Long1: 'It was made to help users who download media for circumstances that requires offline usage.',
-  Frontend_Product_Description_Long2: 'The philosophy is ad-hoc consumption, get it when you want to read/watch it. It is not meant to be a mass downloader to stock up thousands of chapters and will probably never be read.',
   Frontend_Setting: 'Setting',
   Frontend_Settings: 'Settings',
   Frontend_Help: 'Help',
@@ -57,6 +54,9 @@ const translations: VariantResource = {
 
   Frontend_Classic_Label: 'Classic',
   Frontend_Classic_Description: 'The standard frontend mostly based on the previous version',
+  Frontend_Classic_Product_Description_Short: 'is a cross-platform downloader for manga and anime from various websites.',
+  Frontend_Classic_Product_Description_Long1: 'It was made to help users who download media for circumstances that requires offline usage.',
+  Frontend_Classic_Product_Description_Long2: 'The philosophy is ad-hoc consumption, get it when you want to read/watch it. It is not meant to be a mass downloader to stock up thousands of chapters and will probably never be read.',
   Frontend_Classic_Settings_FuzzySearch: 'Fuzzy Search',
   Frontend_Classic_Settings_FuzzySearchInfo: 'Enable fuzzy search on filters (approximative matching)',
   Frontend_Classic_Settings_Theme: 'Theme',
@@ -91,6 +91,8 @@ const translations: VariantResource = {
   Frontend_Classic_Settings_ViewerReverseDirectionInfo: 'Show pages/images in reverse order (like in tradional Manga)',
   Frontend_Classic_Settings_ViewerDoublePage: 'Show Double Pages',
   Frontend_Classic_Settings_ViewerDoublePageInfo: 'Show two pages/images at once (like in tradional Manga)',
+  Frontend_Classic_Settings_ViewerPreloadNextItem: 'Preload Next Item',
+  Frontend_Classic_Settings_ViewerPreloadNextItemInfo: 'Start loading the next chapter/item once all images of the current one are loaded',
   Frontend_Classic_Sidenav_Home: 'Home',
   Frontend_Classic_Sidenav_Settings_General: 'General',
   Frontend_Classic_Sidenav_Settings_Interface: 'Interface',
